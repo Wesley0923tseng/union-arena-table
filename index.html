@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Union Arena Table Simulator</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">UA</span>
+          <div>
+            <h1>Union Arena Table</h1>
+            <p>手動牌桌模擬器</p>
+          </div>
+        </div>
+
+        <section class="top-actions" aria-label="快捷操作">
+          <button data-action="openingHand">開局</button>
+          <button data-action="mulligan">調度</button>
+          <button data-action="drawOne">抽 1</button>
+          <button data-action="drawSeven">抽 7</button>
+          <button data-action="revealTop">公開頂</button>
+          <button data-action="damageOne">傷害 1</button>
+          <button data-action="readyAll">全部轉直</button>
+          <button id="undoBtn" class="tool-button">Undo</button>
+          <button id="openTextImport" class="tool-button">匯入 HTML/牌表</button>
+        </section>
+      </header>
+
+      <section class="table-grid" aria-label="牌桌">
+        <aside class="left-rail">
+          <div class="zone pile-zone" data-zone="deck">
+            <div class="zone-head">
+              <h2>Deck</h2>
+              <span data-count="deck">0</span>
+            </div>
+            <div class="stack-anchor" data-slot="deck"></div>
+          </div>
+
+          <div class="zone pile-zone" data-zone="life">
+            <div class="zone-head">
+              <h2>Life</h2>
+              <span data-count="life">0</span>
+            </div>
+            <div class="life-grid" data-slot="life"></div>
+          </div>
+
+          <div class="zone pile-zone" data-zone="ap">
+            <div class="zone-head">
+              <h2>AP</h2>
+              <span data-count="ap">0</span>
+            </div>
+            <div class="ap-grid" data-slot="ap"></div>
+          </div>
+        </aside>
+
+        <section class="field-board">
+          <div class="line-zone zone" data-zone="front">
+            <div class="zone-head">
+              <h2>Front Line</h2>
+              <span data-count="front">0/4</span>
+            </div>
+            <div class="slot-row" data-slot="front"></div>
+          </div>
+
+          <div class="line-zone zone" data-zone="energy">
+            <div class="zone-head">
+              <h2>Energy Line</h2>
+              <span data-count="energy">0/4</span>
+            </div>
+            <div class="slot-row" data-slot="energy"></div>
+          </div>
+
+          <div class="zone hand-zone" data-zone="hand">
+            <div class="zone-head">
+              <h2>Hand</h2>
+              <span data-count="hand">0</span>
+            </div>
+            <div class="hand-row" data-slot="hand"></div>
+          </div>
+        </section>
+
+        <aside class="right-rail">
+          <div class="zone list-zone" data-zone="public">
+            <div class="zone-head">
+              <h2>公開區</h2>
+              <span data-count="public">0</span>
+            </div>
+            <div class="card-list" data-slot="public"></div>
+          </div>
+
+          <div class="zone list-zone" data-zone="sideline">
+            <div class="zone-head">
+              <h2>Sideline</h2>
+              <span data-count="sideline">0</span>
+            </div>
+            <div class="card-list" data-slot="sideline"></div>
+          </div>
+
+          <div class="zone list-zone" data-zone="removal">
+            <div class="zone-head">
+              <h2>Removal</h2>
+              <span data-count="removal">0</span>
+            </div>
+            <div class="card-list" data-slot="removal"></div>
+          </div>
+        </aside>
+      </section>
+
+    </main>
+
+    <dialog id="cardDialog" class="card-dialog">
+      <img id="dialogImage" alt="卡片預覽">
+    </dialog>
+
+    <dialog id="stackDialog" class="stack-dialog">
+      <h2 id="stackDialogTitle">下方卡牌</h2>
+      <div id="stackCards" class="stack-cards"></div>
+    </dialog>
+
+    <dialog id="importDialog" class="import-dialog">
+      <button id="closeImportDialog" class="icon-button dialog-close" title="關閉">×</button>
+      <h2>匯入 HTML / 牌表</h2>
+      <label>
+        網站 Base URL
+        <input id="importBaseUrl" type="url" placeholder="https://example.com/deck/page">
+      </label>
+      <label>
+        貼上路基亞 UA 分享連結、牌組頁 HTML，或文字牌表
+        <textarea id="importText" placeholder="可貼 https://rugiacreation.com/ua/deckEdit?Version=...&Deck=...，或 &lt;img src='...'&gt; 的 HTML，或像 4 UA01BT/HTR-1-001 https://...jpg 的牌表"></textarea>
+      </label>
+      <div class="import-actions">
+        <button id="importFromText" class="primary-button">解析並匯入</button>
+        <button id="clearImportText" class="tool-button">清空</button>
+      </div>
+      <p id="importHint">支援路基亞 deckEdit 分享連結；HTML 會抓卡圖；文字牌表會抓每行的數量與圖片網址。</p>
+    </dialog>
+
+    <template id="cardTemplate">
+      <article class="card" draggable="true">
+        <div class="card-image-wrap">
+          <img alt="">
+          <div class="card-back">UA</div>
+          <span class="stack-badge"></span>
+        </div>
+      </article>
+    </template>
+
+    <div id="contextMenu" class="context-menu" hidden>
+      <button data-menu="view">放大</button>
+      <button data-menu="viewStack">查看下方卡牌</button>
+      <button data-menu="flip">翻面</button>
+      <button data-menu="rest">橫置/直立</button>
+      <button data-menu="raid">疊到選取牌</button>
+      <hr>
+      <button data-menu="toHand">移到手牌</button>
+      <button data-menu="toTop">放牌庫頂</button>
+      <button data-menu="toBottom">放牌庫底</button>
+      <button data-menu="toPublic">移到公開/場外</button>
+      <button data-menu="toSideline">移到 Sideline</button>
+      <button data-menu="toRemoval">移到 Removal</button>
+      <hr>
+      <button data-menu="select">選取/取消</button>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
