@@ -21,25 +21,20 @@
           <button data-action="openingHand">開局</button>
           <button data-action="mulligan">調度</button>
           <button data-action="drawOne">抽 1</button>
-          <button data-action="drawSeven">抽 7</button>
           <button data-action="revealTop">公開頂</button>
           <button data-action="damageOne">傷害 1</button>
           <button data-action="readyAll">全部轉直</button>
           <button id="undoBtn" class="tool-button">Undo</button>
+          <button id="layoutModeBtn" class="tool-button">版面</button>
+          <button id="resetLayoutBtn" class="tool-button layout-only" hidden>初始化版面</button>
           <button id="openTextImport" class="tool-button">匯入 HTML/牌表</button>
         </section>
       </header>
 
       <section class="table-grid" aria-label="牌桌">
+        <div class="resize-handle column-handle left-column-handle" data-resize="left-column" title="拖曳調整左欄寬度"></div>
+        <div class="resize-handle column-handle right-column-handle" data-resize="right-column" title="拖曳調整右欄寬度"></div>
         <aside class="left-rail">
-          <div class="zone pile-zone" data-zone="deck">
-            <div class="zone-head">
-              <h2>Deck</h2>
-              <span data-count="deck">0</span>
-            </div>
-            <div class="stack-anchor" data-slot="deck"></div>
-          </div>
-
           <div class="zone pile-zone" data-zone="life">
             <div class="zone-head">
               <h2>Life</h2>
@@ -47,7 +42,6 @@
             </div>
             <div class="life-grid" data-slot="life"></div>
           </div>
-
           <div class="zone pile-zone" data-zone="ap">
             <div class="zone-head">
               <h2>AP</h2>
@@ -55,6 +49,8 @@
             </div>
             <div class="ap-grid" data-slot="ap"></div>
           </div>
+
+          <div class="empty-panel" aria-hidden="true"></div>
         </aside>
 
         <section class="field-board">
@@ -65,6 +61,7 @@
             </div>
             <div class="slot-row" data-slot="front"></div>
           </div>
+          <div class="resize-handle row-handle front-energy-handle" data-resize="front-energy" title="拖曳調整 Front / Energy 高度"></div>
 
           <div class="line-zone zone" data-zone="energy">
             <div class="zone-head">
@@ -73,6 +70,7 @@
             </div>
             <div class="slot-row" data-slot="energy"></div>
           </div>
+          <div class="resize-handle row-handle energy-hand-handle" data-resize="energy-hand" title="拖曳調整 Energy / Hand 高度"></div>
 
           <div class="zone hand-zone" data-zone="hand">
             <div class="zone-head">
@@ -84,28 +82,40 @@
         </section>
 
         <aside class="right-rail">
+          <div class="zone pile-zone" data-zone="deck">
+            <div class="zone-head">
+              <h2>Deck</h2>
+              <span data-count="deck">0</span>
+            </div>
+            <div class="stack-anchor" data-slot="deck"></div>
+          </div>
+
+          <div class="combined-zone">
+            <div class="zone compact-zone" data-zone="sideline">
+              <div class="zone-head">
+                <h2>Sideline</h2>
+              </div>
+              <button class="zone-count-button" type="button" data-open-zone="sideline">
+                <span data-count="sideline">0</span>
+              </button>
+            </div>
+
+            <div class="zone compact-zone" data-zone="removal">
+              <div class="zone-head">
+                <h2>Removal</h2>
+              </div>
+              <button class="zone-count-button" type="button" data-open-zone="removal">
+                <span data-count="removal">0</span>
+              </button>
+            </div>
+          </div>
+
           <div class="zone list-zone" data-zone="public">
             <div class="zone-head">
               <h2>公開區</h2>
               <span data-count="public">0</span>
             </div>
             <div class="card-list" data-slot="public"></div>
-          </div>
-
-          <div class="zone list-zone" data-zone="sideline">
-            <div class="zone-head">
-              <h2>Sideline</h2>
-              <span data-count="sideline">0</span>
-            </div>
-            <div class="card-list" data-slot="sideline"></div>
-          </div>
-
-          <div class="zone list-zone" data-zone="removal">
-            <div class="zone-head">
-              <h2>Removal</h2>
-              <span data-count="removal">0</span>
-            </div>
-            <div class="card-list" data-slot="removal"></div>
           </div>
         </aside>
       </section>

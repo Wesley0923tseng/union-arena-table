@@ -31,6 +31,46 @@ const importDialog = document.querySelector("#importDialog");
 const stackDialog = document.querySelector("#stackDialog");
 const stackDialogTitle = document.querySelector("#stackDialogTitle");
 const stackCards = document.querySelector("#stackCards");
+const layoutStorageKey = "ua-table-layout-v1";
+const defaultLayoutState = {
+  leftCol: 308,
+  rightCol: 250,
+  front: 1,
+  energy: 1,
+  hand: 1,
+};
+const layoutState = {
+  ...defaultLayoutState,
+};
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function loadLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(layoutStorageKey) || "{}");
+    Object.assign(layoutState, saved);
+  } catch {
+    localStorage.removeItem(layoutStorageKey);
+  }
+}
+
+function saveLayout() {
+  localStorage.setItem(layoutStorageKey, JSON.stringify(layoutState));
+}
+
+function applyLayout() {
+  const root = document.documentElement;
+  const totalField = layoutState.front + layoutState.energy + layoutState.hand;
+  root.style.setProperty("--left-col", `${layoutState.leftCol}px`);
+  root.style.setProperty("--right-col", `${layoutState.rightCol}px`);
+  root.style.setProperty("--front-row", `${layoutState.front}fr`);
+  root.style.setProperty("--energy-row", `${layoutState.energy}fr`);
+  root.style.setProperty("--hand-row-size", `${layoutState.hand}fr`);
+  root.style.setProperty("--front-share", String(layoutState.front / totalField));
+  root.style.setProperty("--front-energy-share", String((layoutState.front + layoutState.energy) / totalField));
+}
 
 function cloneStack(stack) {
   return stack.map((entry) => (typeof entry === "string" ? entry : { ...entry, stack: cloneStack(entry.stack || []) }));
@@ -178,12 +218,16 @@ function moveCards(cardIds, destination, options = {}) {
   ids.forEach((id) => {
     const sourceZone = removeFromZone(id);
     const card = state.cards.get(id);
-    if (destination === "removal" && card.stack.length) {
+    if (!["front", "energy"].includes(destination) && card.stack.length) {
       card.stack.forEach((entry) => {
         const stackedCard = createCardFromStackEntry(entry);
         if (!stackedCard) return;
-        normalizeForZone(stackedCard, "removal");
-        zones.removal.push(stackedCard.id);
+        normalizeForZone(stackedCard, destination);
+        if (destination === "deck" && options.deckPosition === "bottom") {
+          zones.deck.unshift(stackedCard.id);
+        } else {
+          zones[destination].push(stackedCard.id);
+        }
       });
       card.stack = [];
     }
@@ -817,13 +861,21 @@ function createCardElement(card, renderContext = {}) {
     });
     node.appendChild(toggle);
   }
+  if (renderContext.zone === "ap") {
+    node.draggable = false;
+  }
 
   node.addEventListener("dragstart", (event) => {
+    if (renderContext.zone === "ap") {
+      event.preventDefault();
+      return;
+    }
     const ids = state.selected.has(card.id) ? [...state.selected] : [card.id];
     event.dataTransfer.setData("text/plain", JSON.stringify(ids));
   });
 
   node.addEventListener("dragover", (event) => {
+    if (renderContext.zone !== "front" && renderContext.zone !== "energy") return;
     event.preventDefault();
     event.stopPropagation();
     node.classList.add("selected");
@@ -834,6 +886,7 @@ function createCardElement(card, renderContext = {}) {
   });
 
   node.addEventListener("drop", (event) => {
+    if (renderContext.zone !== "front" && renderContext.zone !== "energy") return;
     event.preventDefault();
     event.stopPropagation();
     const ids = JSON.parse(event.dataTransfer.getData("text/plain") || "[]").filter((id) => id !== card.id);
@@ -843,6 +896,10 @@ function createCardElement(card, renderContext = {}) {
 
   node.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (renderContext.zone === "ap") {
+      toggleCard(card.id, "resting");
+      return;
+    }
     if (event.shiftKey || event.ctrlKey) {
       if (state.selected.has(card.id)) state.selected.delete(card.id);
       else state.selected.add(card.id);
@@ -864,6 +921,7 @@ function createCardElement(card, renderContext = {}) {
   });
   node.addEventListener("contextmenu", (event) => {
     event.preventDefault();
+    if (renderContext.zone === "ap") return;
     state.contextCardId = card.id;
     openMenu(event.clientX, event.clientY);
   });
@@ -873,6 +931,7 @@ function createCardElement(card, renderContext = {}) {
 
 function renderZone(zone) {
   const slot = document.querySelector(`[data-slot="${zone}"]`);
+  if (!slot) return;
   slot.innerHTML = "";
   const ids = zone === "deck" ? zones.deck.slice(-1) : zones[zone];
   ids.forEach((id, index) => {
@@ -925,21 +984,30 @@ function closeMenu() {
   menu.hidden = true;
 }
 
-document.querySelectorAll(".zone").forEach((zoneEl) => {
+document.querySelectorAll("[data-zone]").forEach((zoneEl) => {
   const zone = zoneEl.dataset.zone;
-  if (zone === "sideline") {
-    zoneEl.addEventListener("click", () => showZoneCards("sideline"));
+  if (zone === "sideline" || zone === "removal") {
+    zoneEl.addEventListener("click", () => showZoneCards(zone));
   }
   zoneEl.addEventListener("dragover", (event) => {
+    if (zone === "ap") return;
     event.preventDefault();
     zoneEl.classList.add("drag-over");
   });
   zoneEl.addEventListener("dragleave", () => zoneEl.classList.remove("drag-over"));
   zoneEl.addEventListener("drop", (event) => {
+    if (zone === "ap") return;
     event.preventDefault();
     zoneEl.classList.remove("drag-over");
     const ids = JSON.parse(event.dataTransfer.getData("text/plain") || "[]");
     moveCards(ids, zone);
+  });
+});
+
+document.querySelectorAll("[data-open-zone]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    showZoneCards(button.dataset.openZone);
   });
 });
 
@@ -1005,6 +1073,69 @@ document.querySelector("#undoBtn").addEventListener("click", () => {
   if (snap) restore(snap);
 });
 
+document.querySelector("#layoutModeBtn").addEventListener("click", () => {
+  document.body.classList.toggle("layout-mode");
+  const enabled = document.body.classList.contains("layout-mode");
+  document.querySelector("#layoutModeBtn").classList.toggle("active", enabled);
+  document.querySelector("#resetLayoutBtn").hidden = !enabled;
+});
+
+document.querySelector("#resetLayoutBtn").addEventListener("click", () => {
+  Object.assign(layoutState, defaultLayoutState);
+  localStorage.removeItem(layoutStorageKey);
+  applyLayout();
+});
+
+document.querySelectorAll("[data-resize]").forEach((handle) => {
+  handle.addEventListener("pointerdown", (event) => {
+    if (!document.body.classList.contains("layout-mode")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    handle.setPointerCapture(event.pointerId);
+    const mode = handle.dataset.resize;
+    const table = document.querySelector(".table-grid");
+    const field = document.querySelector(".field-board");
+    const leftRail = document.querySelector(".left-rail");
+
+    function onMove(moveEvent) {
+      if (mode === "left-column") {
+        const rect = table.getBoundingClientRect();
+        layoutState.leftCol = clamp(moveEvent.clientX - rect.left, 150, 380);
+      }
+      if (mode === "right-column") {
+        const rect = table.getBoundingClientRect();
+        layoutState.rightCol = clamp(rect.right - moveEvent.clientX, 190, 460);
+      }
+      if (mode === "front-energy") {
+        const rect = field.getBoundingClientRect();
+        const total = layoutState.front + layoutState.energy + layoutState.hand;
+        const y = clamp(moveEvent.clientY - rect.top, 50, rect.height - 50);
+        const nextFront = clamp((y / rect.height) * total, 0.5, total - layoutState.hand - 0.5);
+        layoutState.energy = total - layoutState.hand - nextFront;
+        layoutState.front = nextFront;
+      }
+      if (mode === "energy-hand") {
+        const rect = field.getBoundingClientRect();
+        const total = layoutState.front + layoutState.energy + layoutState.hand;
+        const y = clamp(moveEvent.clientY - rect.top, 50, rect.height - 50);
+        const frontEnergy = clamp((y / rect.height) * total, layoutState.front + 0.5, total - 0.5);
+        layoutState.energy = frontEnergy - layoutState.front;
+        layoutState.hand = total - frontEnergy;
+      }
+      applyLayout();
+    }
+
+    function onUp() {
+      saveLayout();
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+});
+
 document.querySelector("#clearLog")?.addEventListener("click", () => {
   state.log = [];
   renderLog();
@@ -1017,4 +1148,6 @@ stackDialog.addEventListener("click", (event) => {
   if (event.target === stackDialog) stackDialog.close();
 });
 
+loadLayout();
+applyLayout();
 render();

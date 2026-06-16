@@ -12,6 +12,11 @@
   --yellow: #f5c84c;
   --card-w: 72px;
   --card-h: 100px;
+  --left-col: 308px;
+  --right-col: 250px;
+  --front-row: 1fr;
+  --energy-row: 1fr;
+  --hand-row-size: 1fr;
 }
 
 * {
@@ -163,8 +168,9 @@ h2 {
 }
 
 .table-grid {
+  position: relative;
   display: grid;
-  grid-template-columns: 220px minmax(540px, 1fr) 250px;
+  grid-template-columns: var(--left-col) minmax(540px, 1fr) var(--right-col);
   gap: 6px;
   min-height: 0;
   height: 100%;
@@ -173,21 +179,122 @@ h2 {
 .left-rail,
 .right-rail,
 .field-board {
+  position: relative;
   display: grid;
   gap: 6px;
   min-height: 0;
 }
 
 .left-rail {
-  grid-template-rows: minmax(0, 3fr) minmax(0, 5fr) 126px;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
 }
 
 .right-rail {
   grid-template-rows: 1fr 1fr 1fr;
 }
 
+.combined-zone {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+  min-height: 0;
+}
+
+.compact-zone {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+}
+
+.zone-count-button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.zone-count-button:hover {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.compact-zone.drag-over .zone-count-button {
+  color: var(--text);
+  background: transparent;
+}
+
+.empty-panel {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(15, 19, 25, 0.28);
+}
+
 .field-board {
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-rows: minmax(0, var(--front-row)) minmax(0, var(--energy-row)) minmax(0, var(--hand-row-size));
+}
+
+.resize-handle {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  background: rgba(245, 200, 76, 0.85);
+  box-shadow: 0 0 0 1px rgba(17, 20, 25, 0.75);
+}
+
+body.layout-mode .resize-handle {
+  display: block;
+}
+
+body.layout-mode .zone {
+  outline: 1px dashed rgba(245, 200, 76, 0.55);
+}
+
+.column-handle {
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  border-radius: 999px;
+}
+
+.left-column-handle {
+  left: calc(var(--left-col) + 1px);
+}
+
+.right-column-handle {
+  right: calc(var(--right-col) + 1px);
+}
+
+.row-handle {
+  left: 0;
+  width: 100%;
+  height: 8px;
+  cursor: row-resize;
+  border-radius: 999px;
+}
+
+.front-energy-handle {
+  top: calc(100% * var(--front-share, 0.333));
+}
+
+.energy-hand-handle {
+  top: calc(100% * var(--front-energy-share, 0.667));
+}
+
+#layoutModeBtn.active {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.layout-only[hidden] {
+  display: none;
 }
 
 .zone {
@@ -222,9 +329,10 @@ h2 {
 
 .slot-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  grid-template-columns: repeat(4, 158px);
+  justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   height: calc(100% - 23px);
 }
 
@@ -272,10 +380,16 @@ h2 {
   gap: 6px;
 }
 
+.ap-grid {
+  gap: 18px;
+  align-content: center;
+  justify-content: center;
+}
+
 .ap-grid .card {
-  flex-basis: 54px;
-  width: 54px;
-  height: 76px;
+  flex-basis: 70px;
+  width: 70px;
+  height: 99px;
 }
 
 .ap-grid .card-back {
@@ -292,13 +406,13 @@ h2 {
 
 .life-grid .card {
   position: absolute;
-  left: 64px;
-  top: calc(var(--life-index, 0) * 14px);
-  transform: rotate(90deg);
+  left: calc(var(--life-index, 0) * 18px);
+  top: calc(50% - var(--card-h) / 2);
+  transform: none;
 }
 
 .life-grid .card.resting {
-  transform: rotate(90deg);
+  transform: none;
 }
 
 .card-list {
@@ -308,26 +422,6 @@ h2 {
   gap: 5px;
   overflow: auto;
   height: calc(100% - 28px);
-}
-
-.zone[data-zone="sideline"] .card-list {
-  position: relative;
-  display: block;
-  overflow: hidden;
-}
-
-.zone[data-zone="sideline"] .card-list .card {
-  position: absolute;
-  left: calc(50% - var(--card-w) / 2);
-  top: calc(50% - var(--card-h) / 2);
-}
-
-.zone[data-zone="sideline"] .card-list .card:nth-child(3n + 2) {
-  transform: translate(4px, 4px);
-}
-
-.zone[data-zone="sideline"] .card-list .card:nth-child(3n) {
-  transform: translate(8px, 8px);
 }
 
 .stack-anchor {
