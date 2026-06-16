@@ -30,6 +30,7 @@ let suppressClickUntil = 0;
 let handTwoFingerScroll = false;
 let handTwoFingerGesture = null;
 let touchDragBlockUntil = 0;
+let activeZoneDialog = null;
 
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
@@ -580,6 +581,7 @@ function showCard(card) {
 }
 
 function showStack(cardId) {
+  activeZoneDialog = null;
   const card = state.cards.get(cardId);
   if (!card) return;
   stackDialogTitle.textContent = "下方卡牌";
@@ -633,6 +635,7 @@ function showStack(cardId) {
 }
 
 function showZoneCards(zone) {
+  activeZoneDialog = zone;
   stackDialogTitle.textContent = zoneLabel(zone);
   stackCards.innerHTML = "";
   if (!zones[zone].length) {
@@ -1081,6 +1084,12 @@ function render() {
 }
 
 function openMenu(x, y) {
+  const activeDialog = [stackDialog, importDialog].find((item) => item.open);
+  if (activeDialog && menu.parentElement !== activeDialog) {
+    activeDialog.appendChild(menu);
+  } else if (!activeDialog && menu.parentElement !== document.body) {
+    document.body.appendChild(menu);
+  }
   menu.hidden = false;
   menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
   menu.style.top = `${Math.min(y, window.innerHeight - 360)}px`;
@@ -1088,6 +1097,9 @@ function openMenu(x, y) {
 
 function closeMenu() {
   menu.hidden = true;
+  if (menu.parentElement !== document.body) {
+    document.body.appendChild(menu);
+  }
 }
 
 function suppressClickBriefly(duration = 180) {
@@ -1433,6 +1445,9 @@ menu.addEventListener("click", (event) => {
     },
   };
   actions[action]?.();
+  if (activeZoneDialog && stackDialog.open) {
+    showZoneCards(activeZoneDialog);
+  }
   closeMenu();
 });
 
@@ -1519,7 +1534,10 @@ dialog.addEventListener("click", (event) => {
   dialog.close();
 });
 stackDialog.addEventListener("click", (event) => {
-  if (event.target === stackDialog) stackDialog.close();
+  if (event.target === stackDialog) {
+    activeZoneDialog = null;
+    stackDialog.close();
+  }
 });
 
 loadLayout();
