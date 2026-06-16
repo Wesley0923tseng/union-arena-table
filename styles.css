@@ -17,6 +17,8 @@
   --front-row: 1fr;
   --energy-row: 1fr;
   --hand-row-size: 1fr;
+  --stage-w: 1180px;
+  --stage-h: 720px;
 }
 
 * {
@@ -84,8 +86,8 @@ button:hover {
 .app-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: 1180px;
-  height: 720px;
+  width: var(--stage-w);
+  height: var(--stage-h);
   min-height: 0;
   gap: 6px;
   padding: 8px;

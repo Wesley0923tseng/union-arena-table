@@ -91,7 +91,11 @@ function fitStageToViewport() {
   const padding = 4;
   const viewportWidth = window.visualViewport?.width || window.innerWidth;
   const viewportHeight = window.visualViewport?.height || window.innerHeight;
-  const scale = Math.min((viewportWidth - padding) / 1180, (viewportHeight - padding) / 720, 1.18);
+  const stageWidth = 1180;
+  const stageHeight = viewportWidth > viewportHeight && viewportHeight < 620 ? 560 : 720;
+  document.documentElement.style.setProperty("--stage-w", `${stageWidth}px`);
+  document.documentElement.style.setProperty("--stage-h", `${stageHeight}px`);
+  const scale = Math.min((viewportWidth - padding) / stageWidth, (viewportHeight - padding) / stageHeight, 1.18);
   stage.style.transform = `scale(${Math.max(0.1, scale)})`;
 }
 
