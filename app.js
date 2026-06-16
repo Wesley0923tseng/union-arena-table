@@ -29,6 +29,7 @@ let twoFingerMenuCardId = null;
 let suppressClickUntil = 0;
 let handTwoFingerScroll = false;
 let handTwoFingerGesture = null;
+let touchDragBlockUntil = 0;
 
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
@@ -884,33 +885,80 @@ function createCardElement(card, renderContext = {}) {
     node.draggable = false;
   }
 
+  function handleDoubleClickAction(event) {
+    event.preventDefault();
+    closeMenu();
+    toggleCard(card.id, "resting");
+  }
+
+  function startHandRightDrag(event) {
+    if (renderContext.zone !== "hand" || event.button !== 2) return false;
+    const handRow = node.closest(".hand-row");
+    if (!handRow) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    closeMenu();
+    const gesture = {
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      moved: false,
+      scrollLeft: handRow.scrollLeft,
+    };
+
+    function onMove(moveEvent) {
+      const dx = moveEvent.clientX - gesture.startX;
+      const dy = moveEvent.clientY - gesture.startY;
+      if (!gesture.moved && Math.hypot(dx, dy) > 5) gesture.moved = true;
+      if (!gesture.moved) return;
+      moveEvent.preventDefault();
+      handRow.scrollLeft = gesture.scrollLeft - dx;
+      gesture.lastX = moveEvent.clientX;
+      gesture.lastY = moveEvent.clientY;
+    }
+
+    function onUp(upEvent) {
+      if (upEvent.button !== 2) return;
+      upEvent.preventDefault();
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (gesture.moved) {
+        suppressClickBriefly(160);
+        return;
+      }
+      openTwoFingerMenu(card, { clientX: upEvent.clientX, clientY: upEvent.clientY });
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return true;
+  }
+
+  node.addEventListener("mousedown", (event) => {
+    startHandRightDrag(event);
+  });
+
   node.addEventListener("touchstart", (event) => {
     if (renderContext.zone === "ap" || event.target.closest("button")) return;
     if (event.targetTouches.length < 2) return;
-    if (renderContext.zone === "hand") {
-      startHandTwoFingerGesture(card, event.targetTouches);
-      return;
+    startHandTwoFingerGesture(card, event.targetTouches);
+    if (renderContext.zone !== "hand") {
+      event.preventDefault();
+      event.stopPropagation();
     }
-    event.preventDefault();
-    event.stopPropagation();
-    twoFingerMenuCardId = card.id;
-    clearPointerDragHighlights();
-    openTwoFingerMenu(card, touchCenter(event.targetTouches));
   }, { passive: false });
 
   node.addEventListener("touchmove", (event) => {
-    if (renderContext.zone !== "hand") return;
     updateHandTwoFingerGesture(card, event.targetTouches);
-  }, { passive: true });
+  }, { passive: renderContext.zone === "hand" });
 
   node.addEventListener("touchend", (event) => {
-    if (renderContext.zone !== "hand") return;
     if (event.targetTouches.length >= 2) return;
     finishHandTwoFingerGesture(card, event);
   }, { passive: false });
 
   node.addEventListener("touchcancel", () => {
-    if (renderContext.zone !== "hand") return;
     handTwoFingerGesture = null;
     handTwoFingerScroll = false;
   });
@@ -972,13 +1020,14 @@ function createCardElement(card, renderContext = {}) {
   });
 
   node.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    closeMenu();
-    toggleCard(card.id, "resting");
+    handleDoubleClickAction(event);
   });
   node.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     if (renderContext.zone === "ap") return;
+    if (renderContext.zone === "hand") {
+      return;
+    }
     state.contextCardId = card.id;
     openMenu(event.clientX, event.clientY);
   });
@@ -1088,11 +1137,13 @@ function startHandTwoFingerGesture(card, touches) {
   handTwoFingerScroll = false;
   handTwoFingerGesture = {
     cardId: card.id,
+    zone: findZone(card.id),
     startX: center.clientX,
     startY: center.clientY,
     lastX: center.clientX,
     lastY: center.clientY,
     moved: false,
+    cancelled: Date.now() < touchDragBlockUntil,
   };
   clearPointerDragHighlights();
 }
@@ -1106,7 +1157,7 @@ function updateHandTwoFingerGesture(card, touches) {
   const dy = center.clientY - handTwoFingerGesture.startY;
   if (Math.hypot(dx, dy) > 8) {
     handTwoFingerGesture.moved = true;
-    handTwoFingerScroll = true;
+    if (handTwoFingerGesture.zone === "hand") handTwoFingerScroll = true;
   }
 }
 
@@ -1115,7 +1166,7 @@ function finishHandTwoFingerGesture(card, event) {
   const gesture = handTwoFingerGesture;
   handTwoFingerGesture = null;
   handTwoFingerScroll = false;
-  if (gesture.moved) return;
+  if (gesture.moved || gesture.cancelled || Date.now() < touchDragBlockUntil) return;
   event.preventDefault();
   event.stopPropagation();
   openTwoFingerMenu(card, { clientX: gesture.lastX, clientY: gesture.lastY });
@@ -1150,14 +1201,6 @@ function enablePointerDrag(node, card, renderContext) {
     if (event.pointerType === "touch") {
       activeTouchCards.set(event.pointerId, card.id);
       if (touchCountForCard(card.id) >= 2) {
-        if (renderContext.zone === "hand") {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        twoFingerMenuCardId = card.id;
-        clearPointerDragHighlights();
-        openTwoFingerMenu(card, event);
         return;
       }
     }
@@ -1169,6 +1212,7 @@ function enablePointerDrag(node, card, renderContext) {
       startY: event.clientY,
       ids,
       dragging: false,
+      pointerType: event.pointerType,
       ghost: null,
       highlight: null,
     };
@@ -1208,6 +1252,7 @@ function enablePointerDrag(node, card, renderContext) {
       moveEvent.preventDefault();
       if (!drag.dragging) {
         drag.dragging = true;
+        if (drag.pointerType === "touch") touchDragBlockUntil = Date.now() + 700;
         makeGhost(moveEvent);
       }
       drag.ghost.style.left = `${moveEvent.clientX}px`;
@@ -1243,6 +1288,7 @@ function enablePointerDrag(node, card, renderContext) {
 
       upEvent.preventDefault();
       suppressClickBriefly(120);
+      if (drag.pointerType === "touch") touchDragBlockUntil = Date.now() + 700;
 
       const cardTarget = cardDropTargetAt(upEvent.clientX, upEvent.clientY, card.id);
       if (cardTarget) {
@@ -1261,8 +1307,12 @@ function enablePointerDrag(node, card, renderContext) {
   });
 }
 
-window.addEventListener("pointerup", (event) => clearActiveTouchPointer(event.pointerId), { capture: true });
-window.addEventListener("pointercancel", (event) => clearActiveTouchPointer(event.pointerId), { capture: true });
+window.addEventListener("pointerup", (event) => {
+  window.setTimeout(() => clearActiveTouchPointer(event.pointerId), 0);
+}, { capture: true });
+window.addEventListener("pointercancel", (event) => {
+  window.setTimeout(() => clearActiveTouchPointer(event.pointerId), 0);
+}, { capture: true });
 
 document.addEventListener("touchmove", (event) => {
   if (event.target.closest("dialog") || event.target.closest(".hand-row")) return;
