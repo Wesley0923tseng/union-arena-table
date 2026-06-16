@@ -644,18 +644,7 @@ function showZoneCards(zone) {
     zones[zone].forEach((id) => {
       const card = state.cards.get(id);
       if (!card) return;
-      const node = template.content.firstElementChild.cloneNode(true);
-      node.draggable = false;
-      node.classList.toggle("face-down", card.faceDown);
-      node.classList.toggle("resting", card.resting);
-      node.classList.toggle("has-stack", card.stack.length > 0);
-      node.querySelector("img").src = card.image || "";
-      node.querySelector("img").alt = cardName(card);
-      node.querySelector(".stack-badge").textContent = card.stack.length + 1;
-      node.addEventListener("click", (event) => {
-        event.stopPropagation();
-        showCard(card);
-      });
+      const node = createCardElement(card, { zone });
       stackCards.appendChild(node);
     });
   }
