@@ -897,32 +897,34 @@ function createCardElement(card, renderContext = {}) {
     if (!handRow) return false;
     event.preventDefault();
     event.stopPropagation();
+    node.setPointerCapture?.(event.pointerId);
     closeMenu();
     const gesture = {
       startX: event.clientX,
       startY: event.clientY,
-      lastX: event.clientX,
-      lastY: event.clientY,
       moved: false,
       scrollLeft: handRow.scrollLeft,
     };
 
     function onMove(moveEvent) {
+      if (moveEvent.pointerId !== event.pointerId) return;
       const dx = moveEvent.clientX - gesture.startX;
       const dy = moveEvent.clientY - gesture.startY;
       if (!gesture.moved && Math.hypot(dx, dy) > 5) gesture.moved = true;
       if (!gesture.moved) return;
       moveEvent.preventDefault();
+      moveEvent.stopPropagation();
       handRow.scrollLeft = gesture.scrollLeft - dx;
-      gesture.lastX = moveEvent.clientX;
-      gesture.lastY = moveEvent.clientY;
     }
 
     function onUp(upEvent) {
-      if (upEvent.button !== 2) return;
+      if (upEvent.pointerId !== event.pointerId) return;
       upEvent.preventDefault();
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      upEvent.stopPropagation();
+      node.releasePointerCapture?.(event.pointerId);
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onCancel, true);
       if (gesture.moved) {
         suppressClickBriefly(160);
         return;
@@ -930,12 +932,21 @@ function createCardElement(card, renderContext = {}) {
       openTwoFingerMenu(card, { clientX: upEvent.clientX, clientY: upEvent.clientY });
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    function onCancel(cancelEvent) {
+      if (cancelEvent.pointerId !== event.pointerId) return;
+      node.releasePointerCapture?.(event.pointerId);
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onCancel, true);
+    }
+
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onCancel, true);
     return true;
   }
 
-  node.addEventListener("mousedown", (event) => {
+  node.addEventListener("pointerdown", (event) => {
     startHandRightDrag(event);
   });
 
@@ -1333,6 +1344,12 @@ document.addEventListener("wheel", (event) => {
 }, { passive: false, capture: true });
 
 document.addEventListener("click", (event) => {
+  if (dialog.open) {
+    event.preventDefault();
+    event.stopPropagation();
+    dialog.close();
+    return;
+  }
   if (suppressNextClick || Date.now() < suppressClickUntil) {
     event.preventDefault();
     event.stopPropagation();
@@ -1508,7 +1525,9 @@ document.querySelector("#clearLog")?.addEventListener("click", () => {
 });
 
 dialog.addEventListener("click", (event) => {
-  if (event.target === dialog) dialog.close();
+  event.preventDefault();
+  event.stopPropagation();
+  dialog.close();
 });
 stackDialog.addEventListener("click", (event) => {
   if (event.target === stackDialog) stackDialog.close();
