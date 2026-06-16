@@ -199,6 +199,7 @@ h2 {
   position: relative;
   display: grid;
   grid-template-columns: var(--left-col) minmax(540px, 1fr) var(--right-col);
+  grid-template-rows: minmax(0, var(--front-row)) minmax(0, var(--energy-row)) minmax(0, var(--hand-row-size));
   gap: 6px;
   min-height: 0;
   height: 100%;
@@ -214,10 +215,20 @@ h2 {
 }
 
 .left-rail {
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-column: 1;
+  grid-row: 1 / 3;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.field-board {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  grid-template-rows: minmax(0, var(--front-row)) minmax(0, var(--energy-row));
 }
 
 .right-rail {
+  grid-column: 3;
+  grid-row: 1 / 4;
   grid-template-rows: 1fr 1fr 1fr;
 }
 
@@ -258,14 +269,9 @@ h2 {
   background: transparent;
 }
 
-.empty-panel {
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(15, 19, 25, 0.28);
-}
-
-.field-board {
-  grid-template-rows: minmax(0, var(--front-row)) minmax(0, var(--energy-row)) minmax(0, var(--hand-row-size));
+.hand-zone {
+  grid-column: 1 / 3;
+  grid-row: 3;
 }
 
 .resize-handle {
@@ -309,11 +315,11 @@ body.layout-mode .zone {
 }
 
 .front-energy-handle {
-  top: calc(100% * var(--front-share, 0.333));
+  top: calc(100% * var(--front-energy-split, 0.5));
 }
 
 .energy-hand-handle {
-  top: calc(100% * var(--front-energy-share, 0.667));
+  top: calc(100% - 4px);
 }
 
 #layoutModeBtn.active {
@@ -357,10 +363,10 @@ body.layout-mode .zone {
 
 .slot-row {
   display: grid;
-  grid-template-columns: repeat(4, 158px);
+  grid-template-columns: repeat(4, 108px);
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 30px;
   height: calc(100% - 23px);
 }
 
@@ -369,10 +375,6 @@ body.layout-mode .zone {
   flex-basis: 108px;
   width: 108px;
   height: 150px;
-}
-
-.line-zone .card {
-  margin-left: 75px;
 }
 
 .hand-zone .card {
@@ -399,7 +401,10 @@ body.layout-mode .zone {
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
-  touch-action: pan-x;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
   -webkit-overflow-scrolling: touch;
   min-height: 104px;
   height: calc(100% - 23px);
@@ -415,15 +420,16 @@ body.layout-mode .zone {
 }
 
 .ap-grid {
-  gap: 18px;
+  gap: 12px;
+  flex-wrap: nowrap;
   align-content: center;
   justify-content: center;
 }
 
 .ap-grid .card {
-  flex-basis: 70px;
-  width: 70px;
-  height: 99px;
+  flex-basis: 54px;
+  width: 54px;
+  height: 76px;
 }
 
 .ap-grid .card-back {
@@ -595,6 +601,19 @@ body.layout-mode .zone {
 
 .card.has-stack .stack-badge {
   display: grid;
+}
+
+.face-state-label {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  z-index: 4;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(17, 20, 25, 0.88);
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .field-toggle {

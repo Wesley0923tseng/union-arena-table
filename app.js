@@ -21,6 +21,7 @@ const state = {
   phaseIndex: 0,
   nextId: 1,
   contextCardId: null,
+  contextStackEntry: null,
 };
 
 let suppressNextClick = false;
@@ -31,6 +32,8 @@ let handTwoFingerScroll = false;
 let handTwoFingerGesture = null;
 let touchDragBlockUntil = 0;
 let activeZoneDialog = null;
+let suppressHandContextMenuUntil = 0;
+let lastHandWheelAt = 0;
 
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
@@ -40,9 +43,9 @@ const importDialog = document.querySelector("#importDialog");
 const stackDialog = document.querySelector("#stackDialog");
 const stackDialogTitle = document.querySelector("#stackDialogTitle");
 const stackCards = document.querySelector("#stackCards");
-const layoutStorageKey = "ua-table-layout-v1";
+const layoutStorageKey = "ua-table-layout-v2";
 const defaultLayoutState = {
-  leftCol: 308,
+  leftCol: 250,
   rightCol: 250,
   front: 1,
   energy: 1,
@@ -79,6 +82,7 @@ function applyLayout() {
   root.style.setProperty("--hand-row-size", `${layoutState.hand}fr`);
   root.style.setProperty("--front-share", String(layoutState.front / totalField));
   root.style.setProperty("--front-energy-share", String((layoutState.front + layoutState.energy) / totalField));
+  root.style.setProperty("--front-energy-split", String(layoutState.front / (layoutState.front + layoutState.energy)));
 }
 
 function fitStageToViewport() {
@@ -118,6 +122,18 @@ function visibleCardSnapshot(card) {
   };
 }
 
+function sourceCardSnapshot(card) {
+  return {
+    id: `stack-${state.nextId++}`,
+    name: card.name,
+    image: card.image,
+    faceDown: card.faceDown,
+    resting: false,
+    stack: uprightStack(card.stack || []),
+    ap: card.ap,
+  };
+}
+
 function resolveStackEntry(entry) {
   if (typeof entry === "string") return state.cards.get(entry);
   return entry;
@@ -129,12 +145,41 @@ function createCardFromStackEntry(entry) {
   const card = {
     ...stacked,
     id: typeof entry === "string" ? entry : `c-${state.nextId++}`,
-    faceDown: false,
     resting: false,
     stack: [],
   };
   state.cards.set(card.id, card);
   return card;
+}
+
+function stackCardOntoTarget(sourceId, targetId) {
+  if (sourceId === targetId) return false;
+  const source = state.cards.get(sourceId);
+  const target = state.cards.get(targetId);
+  if (!source || !target) return false;
+  if (!["front", "energy"].includes(findZone(targetId))) {
+    addLog("Raid ?芾? Front Line ??Energy Line ??銝?");
+    render();
+    return false;
+  }
+
+  const sourceSnapshot = sourceCardSnapshot(source);
+  removeFromZone(sourceId);
+
+  if (source.faceDown) {
+    target.stack = [sourceSnapshot, ...uprightStack(target.stack)];
+  } else {
+    const targetSnapshot = visibleCardSnapshot(target);
+    target.stack = [...uprightStack(target.stack), targetSnapshot, ...uprightStack(source.stack)];
+    target.image = source.image || target.image;
+    target.name = source.name;
+    target.faceDown = false;
+  }
+
+  state.cards.delete(sourceId);
+  target.resting = false;
+  state.selected.clear();
+  return true;
 }
 
 function cloneZones() {
@@ -507,15 +552,7 @@ function stackOntoSelected(cardId) {
     return;
   }
   commit(`Raid 疊牌：${cardName(source)} 疊到 ${cardName(target)}`);
-  const targetSnapshot = visibleCardSnapshot(target);
-  removeFromZone(cardId);
-  target.stack = [...uprightStack(target.stack), targetSnapshot, ...uprightStack(source.stack)];
-  state.cards.delete(cardId);
-  target.image = source.image || target.image;
-  target.name = source.name;
-  target.faceDown = false;
-  target.resting = false;
-  state.selected.clear();
+  stackCardOntoTarget(cardId, targetId);
   render();
 }
 
@@ -530,15 +567,7 @@ function raidCardOnto(sourceId, targetId) {
     return;
   }
   commit(`Raid 疊牌：${cardName(source)} 疊到 ${cardName(target)}`);
-  const targetSnapshot = visibleCardSnapshot(target);
-  removeFromZone(sourceId);
-  target.stack = [...uprightStack(target.stack), targetSnapshot, ...uprightStack(source.stack)];
-  state.cards.delete(sourceId);
-  target.image = source.image || target.image;
-  target.name = source.name;
-  target.faceDown = false;
-  target.resting = false;
-  state.selected.clear();
+  stackCardOntoTarget(sourceId, targetId);
   render();
 }
 
@@ -592,22 +621,55 @@ function showStack(cardId) {
     empty.textContent = "這張牌下方沒有卡牌。";
     stackCards.appendChild(empty);
   } else {
-    card.stack.forEach((entry, index) => {
+    card.stack.map((entry, index) => ({ entry, index })).reverse().forEach(({ entry, index }) => {
       const stacked = resolveStackEntry(entry);
       if (!stacked) return;
       stacked.resting = false;
       const node = template.content.firstElementChild.cloneNode(true);
       node.draggable = false;
+      node.dataset.stackParentId = cardId;
+      node.dataset.stackIndex = String(index);
+      node.classList.add("stack-entry-card");
       node.classList.toggle("face-down", stacked.faceDown);
       node.classList.remove("resting");
       node.classList.toggle("has-stack", stacked.stack.length > 0);
       node.querySelector("img").src = stacked.image || "";
       node.querySelector("img").alt = cardName(stacked);
       node.querySelector(".stack-badge").textContent = stacked.stack.length + 1;
+      if (stacked.faceDown) {
+        const faceLabel = document.createElement("span");
+        faceLabel.className = "face-state-label";
+        faceLabel.textContent = "背面";
+        node.appendChild(faceLabel);
+      }
       node.addEventListener("click", (event) => {
         event.stopPropagation();
         showCard(stacked);
       });
+      let stackTouchMenu = null;
+      node.addEventListener("touchstart", (event) => {
+        if (event.targetTouches.length < 2) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const center = touchCenter(event.targetTouches);
+        stackTouchMenu = { x: center.clientX, y: center.clientY, moved: false };
+      }, { passive: false });
+      node.addEventListener("touchmove", (event) => {
+        if (!stackTouchMenu || event.targetTouches.length < 2) return;
+        const center = touchCenter(event.targetTouches);
+        if (Math.hypot(center.clientX - stackTouchMenu.x, center.clientY - stackTouchMenu.y) > 8) {
+          stackTouchMenu.moved = true;
+        }
+      }, { passive: true });
+      node.addEventListener("touchend", (event) => {
+        if (!stackTouchMenu || event.targetTouches.length >= 2) return;
+        const gesture = stackTouchMenu;
+        stackTouchMenu = null;
+        if (gesture.moved) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openStackEntryMenu(cardId, index, { clientX: gesture.x, clientY: gesture.y });
+      }, { passive: false });
       const item = document.createElement("div");
       item.className = "stack-card-entry";
       const actions = document.createElement("div");
@@ -627,8 +689,7 @@ function showStack(cardId) {
         moveStackEntry(cardId, index, "sideline");
       });
       actions.append(toHand, toSideline);
-      item.append(node, actions);
-      stackCards.appendChild(item);
+      stackCards.appendChild(node);
     });
   }
   stackDialog.showModal();
@@ -917,6 +978,7 @@ function createCardElement(card, renderContext = {}) {
       window.removeEventListener("pointermove", onMove, true);
       window.removeEventListener("pointerup", onUp, true);
       window.removeEventListener("pointercancel", onCancel, true);
+      suppressHandContextMenuUntil = Date.now() + 450;
       if (gesture.moved) {
         suppressClickBriefly(160);
         return;
@@ -946,10 +1008,8 @@ function createCardElement(card, renderContext = {}) {
     if (renderContext.zone === "ap" || event.target.closest("button")) return;
     if (event.targetTouches.length < 2) return;
     startHandTwoFingerGesture(card, event.targetTouches, node);
-    if (renderContext.zone !== "hand") {
-      event.preventDefault();
-      event.stopPropagation();
-    }
+    event.preventDefault();
+    event.stopPropagation();
   }, { passive: false });
 
   node.addEventListener("touchmove", (event) => {
@@ -1131,8 +1191,23 @@ function touchCountForCard(cardId) {
 
 function openTwoFingerMenu(card, event) {
   state.contextCardId = card.id;
+  state.contextStackEntry = null;
   openMenu(event.clientX, event.clientY);
   suppressClickBriefly(900);
+}
+
+function openStackEntryMenu(parentId, index, event) {
+  state.contextCardId = null;
+  state.contextStackEntry = { parentId, index };
+  openMenu(event.clientX, event.clientY);
+  suppressClickBriefly(900);
+}
+
+function contextStackCard() {
+  if (!state.contextStackEntry) return null;
+  const parent = state.cards.get(state.contextStackEntry.parentId);
+  const entry = parent?.stack[state.contextStackEntry.index];
+  return entry ? resolveStackEntry(entry) : null;
 }
 
 function touchCenter(touches) {
@@ -1347,6 +1422,7 @@ document.addEventListener("touchmove", (event) => {
 document.addEventListener("wheel", (event) => {
   const handRow = event.target.closest(".hand-row");
   if (handRow) {
+    lastHandWheelAt = Date.now();
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       handRow.scrollLeft += event.deltaY;
       event.preventDefault();
@@ -1437,8 +1513,30 @@ document.querySelector(".top-actions").addEventListener("click", (event) => {
 
 menu.addEventListener("click", (event) => {
   const action = event.target.dataset.menu;
+  if (!action) return;
+  if (state.contextStackEntry) {
+    const { parentId, index } = state.contextStackEntry;
+    const stacked = contextStackCard();
+    const stackActions = {
+      view: () => showCard(stacked),
+      flip: () => {
+        if (!stacked) return;
+        commit(`Flip stacked card: ${cardName(stacked)}`);
+        stacked.faceDown = !stacked.faceDown;
+        showStack(parentId);
+      },
+      toHand: () => moveStackEntry(parentId, index, "hand"),
+      toPublic: () => moveStackEntry(parentId, index, "public"),
+      toSideline: () => moveStackEntry(parentId, index, "sideline"),
+      toRemoval: () => moveStackEntry(parentId, index, "removal"),
+    };
+    stackActions[action]?.();
+    state.contextStackEntry = null;
+    closeMenu();
+    return;
+  }
   const id = state.contextCardId;
-  if (!action || !id) return;
+  if (!id) return;
   const actions = {
     view: () => showCard(state.cards.get(id)),
     viewStack: () => showStack(id),
@@ -1464,8 +1562,35 @@ menu.addEventListener("click", (event) => {
   closeMenu();
 });
 
-document.addEventListener("click", (event) => {
-  if (!menu.contains(event.target)) closeMenu();
+function closeMenuAndBlockOutside(event) {
+  if (menu.hidden || menu.contains(event.target)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeMenu();
+}
+
+document.addEventListener("pointerdown", closeMenuAndBlockOutside, { capture: true });
+document.addEventListener("click", closeMenuAndBlockOutside, { capture: true });
+
+document.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  const handZone = event.target.closest(".hand-zone");
+  if (handZone && (Date.now() < suppressHandContextMenuUntil || Date.now() - lastHandWheelAt < 500)) return;
+  const stackEl = event.target.closest(".stack-entry-card");
+  if (stackEl) {
+    openStackEntryMenu(stackEl.dataset.stackParentId, Number(stackEl.dataset.stackIndex), event);
+    return;
+  }
+  const cardEl = event.target.closest(".card[data-card-id]");
+  const card = cardEl ? state.cards.get(cardEl.dataset.cardId) : null;
+  if (card?.ap) return;
+  if (card) openTwoFingerMenu(card, event);
+}, { capture: true });
+
+document.addEventListener("gesturestart", (event) => {
+  if (!event.target.closest(".hand-zone")) return;
+  event.preventDefault();
 });
 
 document.querySelector("#undoBtn").addEventListener("click", () => {
@@ -1495,7 +1620,6 @@ document.querySelectorAll("[data-resize]").forEach((handle) => {
     const mode = handle.dataset.resize;
     const table = document.querySelector(".table-grid");
     const field = document.querySelector(".field-board");
-    const leftRail = document.querySelector(".left-rail");
 
     function onMove(moveEvent) {
       if (mode === "left-column") {
@@ -1508,14 +1632,14 @@ document.querySelectorAll("[data-resize]").forEach((handle) => {
       }
       if (mode === "front-energy") {
         const rect = field.getBoundingClientRect();
-        const total = layoutState.front + layoutState.energy + layoutState.hand;
+        const total = layoutState.front + layoutState.energy;
         const y = clamp(moveEvent.clientY - rect.top, 50, rect.height - 50);
-        const nextFront = clamp((y / rect.height) * total, 0.5, total - layoutState.hand - 0.5);
-        layoutState.energy = total - layoutState.hand - nextFront;
+        const nextFront = clamp((y / rect.height) * total, 0.5, total - 0.5);
+        layoutState.energy = total - nextFront;
         layoutState.front = nextFront;
       }
       if (mode === "energy-hand") {
-        const rect = field.getBoundingClientRect();
+        const rect = table.getBoundingClientRect();
         const total = layoutState.front + layoutState.energy + layoutState.hand;
         const y = clamp(moveEvent.clientY - rect.top, 50, rect.height - 50);
         const frontEnergy = clamp((y / rect.height) * total, layoutState.front + 0.5, total - 0.5);
