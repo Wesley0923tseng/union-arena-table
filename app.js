@@ -34,7 +34,6 @@ let touchDragBlockUntil = 0;
 let activeZoneDialog = null;
 let suppressHandContextMenuUntil = 0;
 let lastHandWheelAt = 0;
-
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
 const dialog = document.querySelector("#cardDialog");
@@ -1314,6 +1313,9 @@ function enablePointerDrag(node, card, renderContext) {
       if (touchCountForCard(card.id) >= 2) {
         return;
       }
+      event.preventDefault();
+      event.stopPropagation();
+      node.setPointerCapture?.(event.pointerId);
     }
 
     const ids = state.selected.has(card.id) ? [...state.selected] : [card.id];
@@ -1381,6 +1383,7 @@ function enablePointerDrag(node, card, renderContext) {
     function cleanup() {
       clearPointerDragHighlights();
       drag.ghost?.remove();
+      node.releasePointerCapture?.(drag.pointerId);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
@@ -1429,6 +1432,11 @@ document.addEventListener("touchmove", (event) => {
   if (event.target.closest("dialog") || event.target.closest(".hand-row")) return;
   event.preventDefault();
 }, { passive: false, capture: true });
+
+document.addEventListener("dblclick", (event) => {
+  if (!event.target.closest(".stage-viewport")) return;
+  event.preventDefault();
+}, { capture: true });
 
 document.addEventListener("wheel", (event) => {
   const handRow = event.target.closest(".hand-row");
