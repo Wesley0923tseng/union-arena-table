@@ -72,6 +72,14 @@ function applyLayout() {
   root.style.setProperty("--front-energy-share", String((layoutState.front + layoutState.energy) / totalField));
 }
 
+function fitStageToViewport() {
+  const stage = document.querySelector("#appStage");
+  if (!stage) return;
+  const padding = 8;
+  const scale = Math.min((window.innerWidth - padding) / 1180, (window.innerHeight - padding) / 720, 1);
+  stage.style.transform = `scale(${Math.max(0.1, scale)})`;
+}
+
 function cloneStack(stack) {
   return stack.map((entry) => (typeof entry === "string" ? entry : { ...entry, stack: cloneStack(entry.stack || []) }));
 }
@@ -1150,4 +1158,7 @@ stackDialog.addEventListener("click", (event) => {
 
 loadLayout();
 applyLayout();
+fitStageToViewport();
+window.addEventListener("resize", fitStageToViewport);
+window.addEventListener("orientationchange", fitStageToViewport);
 render();

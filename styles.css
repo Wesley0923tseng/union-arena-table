@@ -25,7 +25,7 @@
 
 body {
   margin: 0;
-  min-width: 1180px;
+  min-width: 0;
   height: 100vh;
   overflow: hidden;
   background:
@@ -34,6 +34,15 @@ body {
     var(--bg);
   color: var(--text);
   font-family: "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+}
+
+.stage-viewport {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: transparent;
 }
 
 button,
@@ -58,10 +67,12 @@ button:hover {
 .app-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 100vh;
-  height: 100vh;
+  width: 1180px;
+  height: 720px;
+  min-height: 0;
   gap: 6px;
   padding: 8px;
+  transform-origin: center center;
 }
 
 .topbar,
