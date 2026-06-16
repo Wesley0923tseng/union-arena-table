@@ -879,6 +879,16 @@ function createCardElement(card, renderContext = {}) {
     node.draggable = false;
   }
 
+  node.addEventListener("touchstart", (event) => {
+    if (renderContext.zone === "ap" || event.target.closest("button")) return;
+    if (event.targetTouches.length < 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+    twoFingerMenuCardId = card.id;
+    clearPointerDragHighlights();
+    openTwoFingerMenu(card, touchCenter(event.targetTouches));
+  }, { passive: false });
+
   enablePointerDrag(node, card, renderContext);
 
   node.addEventListener("dragstart", (event) => {
@@ -1030,6 +1040,18 @@ function openTwoFingerMenu(card, event) {
   suppressClickBriefly(260);
 }
 
+function touchCenter(touches) {
+  const points = [...touches];
+  const sum = points.reduce((total, touch) => ({
+    x: total.x + touch.clientX,
+    y: total.y + touch.clientY,
+  }), { x: 0, y: 0 });
+  return {
+    clientX: sum.x / points.length,
+    clientY: sum.y / points.length,
+  };
+}
+
 function clearPointerDragHighlights() {
   document.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
   document.querySelectorAll(".drag-over-card").forEach((el) => el.classList.remove("drag-over-card"));
@@ -1170,7 +1192,21 @@ window.addEventListener("pointerup", (event) => clearActiveTouchPointer(event.po
 window.addEventListener("pointercancel", (event) => clearActiveTouchPointer(event.pointerId));
 
 document.addEventListener("touchmove", (event) => {
-  if (!event.target.closest("dialog")) event.preventDefault();
+  if (event.target.closest("dialog") || event.target.closest(".hand-row")) return;
+  event.preventDefault();
+}, { passive: false });
+
+document.addEventListener("wheel", (event) => {
+  const handRow = event.target.closest(".hand-row");
+  if (handRow) {
+    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+      handRow.scrollLeft += event.deltaY;
+      event.preventDefault();
+    }
+    return;
+  }
+  if (event.target.closest("dialog")) return;
+  event.preventDefault();
 }, { passive: false });
 
 document.querySelectorAll("[data-zone]").forEach((zoneEl) => {

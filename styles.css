@@ -51,7 +51,6 @@ body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  touch-action: none;
   display: grid;
   place-items: center;
   background: transparent;
@@ -390,6 +389,8 @@ body.layout-mode .zone {
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
   min-height: 104px;
   height: calc(100% - 23px);
   padding-bottom: 6px;
