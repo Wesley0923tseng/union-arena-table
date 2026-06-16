@@ -24,6 +24,8 @@ const state = {
 };
 
 let suppressNextClick = false;
+const activeTouchCards = new Map();
+let twoFingerMenuCardId = null;
 
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
@@ -1003,6 +1005,31 @@ function closeMenu() {
   menu.hidden = true;
 }
 
+function suppressClickBriefly(duration = 180) {
+  suppressNextClick = true;
+  window.setTimeout(() => {
+    suppressNextClick = false;
+  }, duration);
+}
+
+function clearActiveTouchPointer(pointerId) {
+  const cardId = activeTouchCards.get(pointerId);
+  activeTouchCards.delete(pointerId);
+  if (twoFingerMenuCardId === cardId && ![...activeTouchCards.values()].includes(cardId)) {
+    twoFingerMenuCardId = null;
+  }
+}
+
+function touchCountForCard(cardId) {
+  return [...activeTouchCards.values()].filter((id) => id === cardId).length;
+}
+
+function openTwoFingerMenu(card, event) {
+  state.contextCardId = card.id;
+  openMenu(event.clientX, event.clientY);
+  suppressClickBriefly(260);
+}
+
 function clearPointerDragHighlights() {
   document.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
   document.querySelectorAll(".drag-over-card").forEach((el) => el.classList.remove("drag-over-card"));
@@ -1029,6 +1056,17 @@ function enablePointerDrag(node, card, renderContext) {
 
   node.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || event.target.closest("button")) return;
+    if (event.pointerType === "touch") {
+      activeTouchCards.set(event.pointerId, card.id);
+      if (touchCountForCard(card.id) >= 2) {
+        event.preventDefault();
+        event.stopPropagation();
+        twoFingerMenuCardId = card.id;
+        clearPointerDragHighlights();
+        openTwoFingerMenu(card, event);
+        return;
+      }
+    }
 
     const ids = state.selected.has(card.id) ? [...state.selected] : [card.id];
     const drag = {
@@ -1064,6 +1102,10 @@ function enablePointerDrag(node, card, renderContext) {
 
     function onMove(moveEvent) {
       if (moveEvent.pointerId !== drag.pointerId) return;
+      if (twoFingerMenuCardId === card.id) {
+        moveEvent.preventDefault();
+        return;
+      }
       const dx = moveEvent.clientX - drag.startX;
       const dy = moveEvent.clientY - drag.startY;
       if (!drag.dragging && Math.hypot(dx, dy) < 5) return;
@@ -1105,10 +1147,7 @@ function enablePointerDrag(node, card, renderContext) {
       if (!wasDragging) return;
 
       upEvent.preventDefault();
-      suppressNextClick = true;
-      window.setTimeout(() => {
-        suppressNextClick = false;
-      }, 120);
+      suppressClickBriefly(120);
 
       const cardTarget = cardDropTargetAt(upEvent.clientX, upEvent.clientY, card.id);
       if (cardTarget) {
@@ -1126,6 +1165,13 @@ function enablePointerDrag(node, card, renderContext) {
     window.addEventListener("pointercancel", onCancel);
   });
 }
+
+window.addEventListener("pointerup", (event) => clearActiveTouchPointer(event.pointerId));
+window.addEventListener("pointercancel", (event) => clearActiveTouchPointer(event.pointerId));
+
+document.addEventListener("touchmove", (event) => {
+  if (!event.target.closest("dialog")) event.preventDefault();
+}, { passive: false });
 
 document.querySelectorAll("[data-zone]").forEach((zoneEl) => {
   const zone = zoneEl.dataset.zone;
