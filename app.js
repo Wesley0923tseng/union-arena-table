@@ -89,14 +89,21 @@ function fitStageToViewport() {
   const stage = document.querySelector("#appStage");
   if (!stage) return;
   const padding = 4;
-  const viewportWidth = window.visualViewport?.width || window.innerWidth;
-  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  const viewport = window.visualViewport;
+  const viewportWidth = viewport?.width || window.innerWidth;
+  const viewportHeight = viewport?.height || window.innerHeight;
+  const offsetLeft = viewport?.offsetLeft || 0;
+  const offsetTop = viewport?.offsetTop || 0;
   const stageWidth = 1180;
-  const stageHeight = viewportWidth > viewportHeight && viewportHeight < 620 ? 560 : 720;
+  const compactLandscape = viewportWidth > viewportHeight && viewportHeight < 620;
+  const stageHeight = compactLandscape ? 560 : 720;
   document.documentElement.style.setProperty("--stage-w", `${stageWidth}px`);
   document.documentElement.style.setProperty("--stage-h", `${stageHeight}px`);
   const scale = Math.min((viewportWidth - padding) / stageWidth, (viewportHeight - padding) / stageHeight, 1.18);
-  stage.style.transform = `scale(${Math.max(0.1, scale)})`;
+  const safeScale = Math.max(0.1, scale);
+  const x = compactLandscape ? 0 : Math.max(0, (viewportWidth - stageWidth * safeScale) / 2);
+  const y = compactLandscape ? 0 : Math.max(0, (viewportHeight - stageHeight * safeScale) / 2);
+  stage.style.transform = `translate(${offsetLeft + x}px, ${offsetTop + y}px) scale(${safeScale})`;
 }
 
 function cloneStack(stack) {

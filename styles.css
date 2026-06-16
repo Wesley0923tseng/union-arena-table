@@ -59,8 +59,7 @@ body {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  display: grid;
-  place-items: center;
+  display: block;
   background: transparent;
 }
 
@@ -84,6 +83,9 @@ button:hover {
 }
 
 .app-shell {
+  position: absolute;
+  left: 0;
+  top: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: var(--stage-w);
@@ -91,7 +93,7 @@ button:hover {
   min-height: 0;
   gap: 6px;
   padding: 8px;
-  transform-origin: center center;
+  transform-origin: top left;
 }
 
 .topbar,
