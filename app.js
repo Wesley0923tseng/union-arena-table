@@ -27,6 +27,8 @@ let suppressNextClick = false;
 const activeTouchCards = new Map();
 let twoFingerMenuCardId = null;
 let suppressClickUntil = 0;
+let handTwoFingerScroll = false;
+let handTwoFingerGesture = null;
 
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
@@ -80,8 +82,10 @@ function applyLayout() {
 function fitStageToViewport() {
   const stage = document.querySelector("#appStage");
   if (!stage) return;
-  const padding = 8;
-  const scale = Math.min((window.innerWidth - padding) / 1180, (window.innerHeight - padding) / 720, 1);
+  const padding = 4;
+  const viewportWidth = window.visualViewport?.width || window.innerWidth;
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  const scale = Math.min((viewportWidth - padding) / 1180, (viewportHeight - padding) / 720, 1.18);
   stage.style.transform = `scale(${Math.max(0.1, scale)})`;
 }
 
@@ -883,12 +887,33 @@ function createCardElement(card, renderContext = {}) {
   node.addEventListener("touchstart", (event) => {
     if (renderContext.zone === "ap" || event.target.closest("button")) return;
     if (event.targetTouches.length < 2) return;
+    if (renderContext.zone === "hand") {
+      startHandTwoFingerGesture(card, event.targetTouches);
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     twoFingerMenuCardId = card.id;
     clearPointerDragHighlights();
     openTwoFingerMenu(card, touchCenter(event.targetTouches));
   }, { passive: false });
+
+  node.addEventListener("touchmove", (event) => {
+    if (renderContext.zone !== "hand") return;
+    updateHandTwoFingerGesture(card, event.targetTouches);
+  }, { passive: true });
+
+  node.addEventListener("touchend", (event) => {
+    if (renderContext.zone !== "hand") return;
+    if (event.targetTouches.length >= 2) return;
+    finishHandTwoFingerGesture(card, event);
+  }, { passive: false });
+
+  node.addEventListener("touchcancel", () => {
+    if (renderContext.zone !== "hand") return;
+    handTwoFingerGesture = null;
+    handTwoFingerScroll = false;
+  });
 
   enablePointerDrag(node, card, renderContext);
 
@@ -1027,6 +1052,10 @@ function suppressClickBriefly(duration = 180) {
 function clearActiveTouchPointer(pointerId) {
   const cardId = activeTouchCards.get(pointerId);
   activeTouchCards.delete(pointerId);
+  if (![...activeTouchCards.values()].some((id) => findZone(id) === "hand")) {
+    handTwoFingerScroll = false;
+    handTwoFingerGesture = null;
+  }
   if (twoFingerMenuCardId === cardId && ![...activeTouchCards.values()].includes(cardId)) {
     twoFingerMenuCardId = null;
   }
@@ -1052,6 +1081,44 @@ function touchCenter(touches) {
     clientX: sum.x / points.length,
     clientY: sum.y / points.length,
   };
+}
+
+function startHandTwoFingerGesture(card, touches) {
+  const center = touchCenter(touches);
+  handTwoFingerScroll = false;
+  handTwoFingerGesture = {
+    cardId: card.id,
+    startX: center.clientX,
+    startY: center.clientY,
+    lastX: center.clientX,
+    lastY: center.clientY,
+    moved: false,
+  };
+  clearPointerDragHighlights();
+}
+
+function updateHandTwoFingerGesture(card, touches) {
+  if (!handTwoFingerGesture || handTwoFingerGesture.cardId !== card.id || touches.length < 2) return;
+  const center = touchCenter(touches);
+  handTwoFingerGesture.lastX = center.clientX;
+  handTwoFingerGesture.lastY = center.clientY;
+  const dx = center.clientX - handTwoFingerGesture.startX;
+  const dy = center.clientY - handTwoFingerGesture.startY;
+  if (Math.hypot(dx, dy) > 8) {
+    handTwoFingerGesture.moved = true;
+    handTwoFingerScroll = true;
+  }
+}
+
+function finishHandTwoFingerGesture(card, event) {
+  if (!handTwoFingerGesture || handTwoFingerGesture.cardId !== card.id) return;
+  const gesture = handTwoFingerGesture;
+  handTwoFingerGesture = null;
+  handTwoFingerScroll = false;
+  if (gesture.moved) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openTwoFingerMenu(card, { clientX: gesture.lastX, clientY: gesture.lastY });
 }
 
 function clearPointerDragHighlights() {
@@ -1083,6 +1150,9 @@ function enablePointerDrag(node, card, renderContext) {
     if (event.pointerType === "touch") {
       activeTouchCards.set(event.pointerId, card.id);
       if (touchCountForCard(card.id) >= 2) {
+        if (renderContext.zone === "hand") {
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
         twoFingerMenuCardId = card.id;
@@ -1126,6 +1196,7 @@ function enablePointerDrag(node, card, renderContext) {
 
     function onMove(moveEvent) {
       if (moveEvent.pointerId !== drag.pointerId) return;
+      if (renderContext.zone === "hand" && (handTwoFingerScroll || handTwoFingerGesture?.cardId === card.id)) return;
       if (twoFingerMenuCardId === card.id) {
         moveEvent.preventDefault();
         return;

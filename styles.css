@@ -375,6 +375,10 @@ body.layout-mode .zone {
   margin-left: 75px;
 }
 
+.hand-zone .card {
+  touch-action: pan-x;
+}
+
 .slot-row::before,
 .slot-row::after {
   content: "";
