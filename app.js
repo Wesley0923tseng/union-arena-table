@@ -945,7 +945,7 @@ function createCardElement(card, renderContext = {}) {
   node.addEventListener("touchstart", (event) => {
     if (renderContext.zone === "ap" || event.target.closest("button")) return;
     if (event.targetTouches.length < 2) return;
-    startHandTwoFingerGesture(card, event.targetTouches);
+    startHandTwoFingerGesture(card, event.targetTouches, node);
     if (renderContext.zone !== "hand") {
       event.preventDefault();
       event.stopPropagation();
@@ -953,8 +953,11 @@ function createCardElement(card, renderContext = {}) {
   }, { passive: false });
 
   node.addEventListener("touchmove", (event) => {
-    updateHandTwoFingerGesture(card, event.targetTouches);
-  }, { passive: renderContext.zone === "hand" });
+    if (updateHandTwoFingerGesture(card, event.targetTouches)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, { passive: false });
 
   node.addEventListener("touchend", (event) => {
     if (event.targetTouches.length >= 2) return;
@@ -1144,12 +1147,15 @@ function touchCenter(touches) {
   };
 }
 
-function startHandTwoFingerGesture(card, touches) {
+function startHandTwoFingerGesture(card, touches, sourceNode = null) {
   const center = touchCenter(touches);
+  const handRow = sourceNode?.closest?.(".hand-row") || null;
   handTwoFingerScroll = false;
   handTwoFingerGesture = {
     cardId: card.id,
     zone: findZone(card.id),
+    handRow,
+    startScrollLeft: handRow?.scrollLeft || 0,
     startX: center.clientX,
     startY: center.clientY,
     lastX: center.clientX,
@@ -1161,7 +1167,7 @@ function startHandTwoFingerGesture(card, touches) {
 }
 
 function updateHandTwoFingerGesture(card, touches) {
-  if (!handTwoFingerGesture || handTwoFingerGesture.cardId !== card.id || touches.length < 2) return;
+  if (!handTwoFingerGesture || handTwoFingerGesture.cardId !== card.id || touches.length < 2) return false;
   const center = touchCenter(touches);
   handTwoFingerGesture.lastX = center.clientX;
   handTwoFingerGesture.lastY = center.clientY;
@@ -1169,8 +1175,15 @@ function updateHandTwoFingerGesture(card, touches) {
   const dy = center.clientY - handTwoFingerGesture.startY;
   if (Math.hypot(dx, dy) > 8) {
     handTwoFingerGesture.moved = true;
-    if (handTwoFingerGesture.zone === "hand") handTwoFingerScroll = true;
+    if (handTwoFingerGesture.zone === "hand") {
+      handTwoFingerScroll = true;
+      if (handTwoFingerGesture.handRow) {
+        handTwoFingerGesture.handRow.scrollLeft = handTwoFingerGesture.startScrollLeft - dx;
+      }
+      return true;
+    }
   }
+  return handTwoFingerGesture.zone === "hand" && handTwoFingerScroll;
 }
 
 function finishHandTwoFingerGesture(card, event) {

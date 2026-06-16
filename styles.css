@@ -376,7 +376,7 @@ body.layout-mode .zone {
 }
 
 .hand-zone .card {
-  touch-action: pan-x;
+  touch-action: none;
 }
 
 .slot-row::before,
