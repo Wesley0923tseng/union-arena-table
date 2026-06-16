@@ -26,6 +26,7 @@ const state = {
 let suppressNextClick = false;
 const activeTouchCards = new Map();
 let twoFingerMenuCardId = null;
+let suppressClickUntil = 0;
 
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
@@ -922,7 +923,7 @@ function createCardElement(card, renderContext = {}) {
 
   node.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (suppressNextClick) {
+    if (suppressNextClick || Date.now() < suppressClickUntil) {
       event.preventDefault();
       suppressNextClick = false;
       return;
@@ -1017,8 +1018,9 @@ function closeMenu() {
 
 function suppressClickBriefly(duration = 180) {
   suppressNextClick = true;
+  suppressClickUntil = Date.now() + duration;
   window.setTimeout(() => {
-    suppressNextClick = false;
+    if (Date.now() >= suppressClickUntil) suppressNextClick = false;
   }, duration);
 }
 
@@ -1037,7 +1039,7 @@ function touchCountForCard(cardId) {
 function openTwoFingerMenu(card, event) {
   state.contextCardId = card.id;
   openMenu(event.clientX, event.clientY);
-  suppressClickBriefly(260);
+  suppressClickBriefly(900);
 }
 
 function touchCenter(touches) {
@@ -1188,13 +1190,13 @@ function enablePointerDrag(node, card, renderContext) {
   });
 }
 
-window.addEventListener("pointerup", (event) => clearActiveTouchPointer(event.pointerId));
-window.addEventListener("pointercancel", (event) => clearActiveTouchPointer(event.pointerId));
+window.addEventListener("pointerup", (event) => clearActiveTouchPointer(event.pointerId), { capture: true });
+window.addEventListener("pointercancel", (event) => clearActiveTouchPointer(event.pointerId), { capture: true });
 
 document.addEventListener("touchmove", (event) => {
   if (event.target.closest("dialog") || event.target.closest(".hand-row")) return;
   event.preventDefault();
-}, { passive: false });
+}, { passive: false, capture: true });
 
 document.addEventListener("wheel", (event) => {
   const handRow = event.target.closest(".hand-row");
@@ -1207,7 +1209,25 @@ document.addEventListener("wheel", (event) => {
   }
   if (event.target.closest("dialog")) return;
   event.preventDefault();
-}, { passive: false });
+}, { passive: false, capture: true });
+
+document.addEventListener("click", (event) => {
+  if (suppressNextClick || Date.now() < suppressClickUntil) {
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextClick = false;
+  }
+}, { capture: true });
+
+function lockPageScroll() {
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+}
+
+window.addEventListener("scroll", lockPageScroll, { passive: false });
+window.visualViewport?.addEventListener("scroll", lockPageScroll);
+window.visualViewport?.addEventListener("resize", fitStageToViewport);
 
 document.querySelectorAll("[data-zone]").forEach((zoneEl) => {
   const zone = zoneEl.dataset.zone;
@@ -1376,6 +1396,7 @@ stackDialog.addEventListener("click", (event) => {
 loadLayout();
 applyLayout();
 fitStageToViewport();
+lockPageScroll();
 window.addEventListener("resize", fitStageToViewport);
 window.addEventListener("orientationchange", fitStageToViewport);
 render();
