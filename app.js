@@ -23,6 +23,8 @@ const state = {
   contextCardId: null,
 };
 
+let suppressNextClick = false;
+
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
 const dialog = document.querySelector("#cardDialog");
@@ -838,6 +840,7 @@ function importFromText() {
 
 function createCardElement(card, renderContext = {}) {
   const node = template.content.firstElementChild.cloneNode(true);
+  node.draggable = false;
   node.dataset.cardId = card.id;
   node.classList.toggle("face-down", card.faceDown);
   node.classList.toggle("resting", card.resting);
@@ -845,6 +848,7 @@ function createCardElement(card, renderContext = {}) {
   node.classList.toggle("has-stack", card.stack.length > 0);
   node.classList.toggle("ap-card", card.ap);
   const img = node.querySelector("img");
+  img.draggable = false;
   img.src = card.image || "";
   img.alt = cardName(card);
   if (card.ap && !card.image) {
@@ -872,6 +876,8 @@ function createCardElement(card, renderContext = {}) {
   if (renderContext.zone === "ap") {
     node.draggable = false;
   }
+
+  enablePointerDrag(node, card, renderContext);
 
   node.addEventListener("dragstart", (event) => {
     if (renderContext.zone === "ap") {
@@ -904,6 +910,11 @@ function createCardElement(card, renderContext = {}) {
 
   node.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (suppressNextClick) {
+      event.preventDefault();
+      suppressNextClick = false;
+      return;
+    }
     if (renderContext.zone === "ap") {
       toggleCard(card.id, "resting");
       return;
@@ -990,6 +1001,130 @@ function openMenu(x, y) {
 
 function closeMenu() {
   menu.hidden = true;
+}
+
+function clearPointerDragHighlights() {
+  document.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+  document.querySelectorAll(".drag-over-card").forEach((el) => el.classList.remove("drag-over-card"));
+}
+
+function cardDropTargetAt(x, y, sourceId) {
+  const target = document.elementFromPoint(x, y);
+  const cardEl = target?.closest?.(".card[data-card-id]");
+  if (!cardEl || cardEl.dataset.cardId === sourceId) return null;
+  const targetZone = findZone(cardEl.dataset.cardId);
+  if (targetZone !== "front" && targetZone !== "energy") return null;
+  return cardEl;
+}
+
+function zoneDropTargetAt(x, y) {
+  const target = document.elementFromPoint(x, y);
+  const zoneEl = target?.closest?.("[data-zone]");
+  if (!zoneEl || zoneEl.dataset.zone === "ap") return null;
+  return zoneEl;
+}
+
+function enablePointerDrag(node, card, renderContext) {
+  if (renderContext.zone === "ap") return;
+
+  node.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.target.closest("button")) return;
+
+    const ids = state.selected.has(card.id) ? [...state.selected] : [card.id];
+    const drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      ids,
+      dragging: false,
+      ghost: null,
+      highlight: null,
+    };
+
+    function setHighlight(el, className) {
+      if (drag.highlight?.el === el && drag.highlight?.className === className) return;
+      clearPointerDragHighlights();
+      drag.highlight = null;
+      if (!el || !className) return;
+      el.classList.add(className);
+      drag.highlight = { el, className };
+    }
+
+    function makeGhost(moveEvent) {
+      const rect = node.getBoundingClientRect();
+      drag.ghost = node.cloneNode(true);
+      drag.ghost.classList.add("drag-ghost");
+      drag.ghost.style.width = `${rect.width}px`;
+      drag.ghost.style.height = `${rect.height}px`;
+      drag.ghost.style.left = `${moveEvent.clientX}px`;
+      drag.ghost.style.top = `${moveEvent.clientY}px`;
+      document.body.appendChild(drag.ghost);
+      closeMenu();
+    }
+
+    function onMove(moveEvent) {
+      if (moveEvent.pointerId !== drag.pointerId) return;
+      const dx = moveEvent.clientX - drag.startX;
+      const dy = moveEvent.clientY - drag.startY;
+      if (!drag.dragging && Math.hypot(dx, dy) < 5) return;
+
+      moveEvent.preventDefault();
+      if (!drag.dragging) {
+        drag.dragging = true;
+        makeGhost(moveEvent);
+      }
+      drag.ghost.style.left = `${moveEvent.clientX}px`;
+      drag.ghost.style.top = `${moveEvent.clientY}px`;
+
+      const cardTarget = cardDropTargetAt(moveEvent.clientX, moveEvent.clientY, card.id);
+      if (cardTarget) {
+        setHighlight(cardTarget, "drag-over-card");
+        return;
+      }
+      const zoneTarget = zoneDropTargetAt(moveEvent.clientX, moveEvent.clientY);
+      setHighlight(zoneTarget, zoneTarget ? "drag-over" : null);
+    }
+
+    function cleanup() {
+      clearPointerDragHighlights();
+      drag.ghost?.remove();
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    function onCancel(cancelEvent) {
+      if (cancelEvent.pointerId !== drag.pointerId) return;
+      cleanup();
+    }
+
+    function onUp(upEvent) {
+      if (upEvent.pointerId !== drag.pointerId) return;
+      const wasDragging = drag.dragging;
+      cleanup();
+      if (!wasDragging) return;
+
+      upEvent.preventDefault();
+      suppressNextClick = true;
+      window.setTimeout(() => {
+        suppressNextClick = false;
+      }, 120);
+
+      const cardTarget = cardDropTargetAt(upEvent.clientX, upEvent.clientY, card.id);
+      if (cardTarget) {
+        const sourceId = drag.ids.find((id) => id !== cardTarget.dataset.cardId);
+        if (sourceId) raidCardOnto(sourceId, cardTarget.dataset.cardId);
+        return;
+      }
+
+      const zoneTarget = zoneDropTargetAt(upEvent.clientX, upEvent.clientY);
+      if (zoneTarget) moveCards(drag.ids, zoneTarget.dataset.zone);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+  });
 }
 
 document.querySelectorAll("[data-zone]").forEach((zoneEl) => {

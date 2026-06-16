@@ -453,6 +453,9 @@ body.layout-mode .zone {
   height: var(--card-h);
   border-radius: 7px;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
   transition: transform 120ms ease, filter 120ms ease;
 }
 
@@ -461,6 +464,11 @@ body.layout-mode .zone {
 }
 
 .card.selected {
+  outline: 3px solid var(--yellow);
+  outline-offset: 3px;
+}
+
+.card.drag-over-card {
   outline: 3px solid var(--yellow);
   outline-offset: 3px;
 }
@@ -492,6 +500,18 @@ body.layout-mode .zone {
 .card img {
   display: block;
   object-fit: cover;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.drag-ghost {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.86;
+  transform: translate(-50%, -50%) scale(1.04);
+  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.5));
 }
 
 .card.face-down img {
