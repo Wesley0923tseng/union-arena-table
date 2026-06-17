@@ -85,6 +85,7 @@ function applyLayout() {
 }
 
 function fitStageToViewport() {
+  if (document.activeElement?.matches?.("input, textarea, select")) return;
   const stage = document.querySelector("#appStage");
   if (!stage) return;
   const padding = 4;
@@ -1460,6 +1461,7 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (suppressNextClick || Date.now() < suppressClickUntil) {
+    if (menu.contains(event.target) || event.target.closest("button, input, textarea, select, label")) return;
     event.preventDefault();
     event.stopPropagation();
     suppressNextClick = false;
