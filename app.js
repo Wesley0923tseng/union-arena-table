@@ -106,6 +106,12 @@ function fitStageToViewport() {
   stage.style.transform = `translate(${offsetLeft + x}px, ${offsetTop + y}px) scale(${safeScale})`;
 }
 
+let fitStageTimer = 0;
+function scheduleFitStageToViewport() {
+  window.clearTimeout(fitStageTimer);
+  fitStageTimer = window.setTimeout(fitStageToViewport, 120);
+}
+
 function cloneStack(stack) {
   return stack.map((entry) => (typeof entry === "string" ? entry : { ...entry, stack: cloneStack(entry.stack || []) }));
 }
@@ -1430,7 +1436,7 @@ window.addEventListener("pointercancel", (event) => {
 }, { capture: true });
 
 document.addEventListener("touchmove", (event) => {
-  if (event.target.closest("dialog") || event.target.closest(".hand-row")) return;
+  if (event.target.closest("dialog, .hand-row, .context-menu, button, input, textarea, select, label")) return;
   event.preventDefault();
 }, { passive: false, capture: true });
 
@@ -1476,7 +1482,7 @@ function lockPageScroll() {
 
 window.addEventListener("scroll", lockPageScroll, { passive: false });
 window.visualViewport?.addEventListener("scroll", lockPageScroll);
-window.visualViewport?.addEventListener("resize", fitStageToViewport);
+window.visualViewport?.addEventListener("resize", scheduleFitStageToViewport);
 
 document.querySelectorAll("[data-zone]").forEach((zoneEl) => {
   const zone = zoneEl.dataset.zone;
@@ -1703,5 +1709,5 @@ applyLayout();
 fitStageToViewport();
 lockPageScroll();
 window.addEventListener("resize", fitStageToViewport);
-window.addEventListener("orientationchange", fitStageToViewport);
+window.addEventListener("orientationchange", scheduleFitStageToViewport);
 render();
