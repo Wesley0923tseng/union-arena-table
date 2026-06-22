@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Union Arena Table Simulator</title>
-    <link rel="stylesheet" href="styles.css?v=20260617-layout9">
+    <link rel="stylesheet" href="styles.css?v=20260617-layout21">
   </head>
   <body>
     <div class="stage-viewport">
@@ -21,14 +21,8 @@
         <section class="top-actions" aria-label="快捷操作">
           <button data-action="openingHand">開局</button>
           <button data-action="mulligan">調度</button>
-          <button data-action="drawOne">抽 1</button>
-          <button data-action="revealTop">公開頂</button>
-          <button data-action="damageOne">傷害 1</button>
-          <button data-action="readyAll">全部轉直</button>
           <button id="undoBtn" class="tool-button">Undo</button>
-          <button id="layoutModeBtn" class="tool-button">版面</button>
-          <button id="resetLayoutBtn" class="tool-button layout-only" hidden>初始化版面</button>
-          <button id="openTextImport" class="tool-button">匯入 HTML/牌表</button>
+          <button id="openTextImport" class="tool-button">匯入牌表</button>
         </section>
       </header>
 
@@ -43,12 +37,13 @@
             </div>
             <div class="life-grid" data-slot="life"></div>
           </div>
-          <div class="zone pile-zone" data-zone="ap">
+          <div class="zone pile-zone ap-zone" data-zone="ap">
             <div class="zone-head">
               <h2>AP</h2>
               <span data-count="ap">0</span>
             </div>
             <div class="ap-grid" data-slot="ap"></div>
+            <button id="endTurnBtn" class="ap-end-button" type="button">回合結束</button>
           </div>
 
         </aside>
@@ -83,12 +78,13 @@
         </div>
 
         <aside class="right-rail">
-          <div class="zone pile-zone" data-zone="deck">
+          <div class="zone pile-zone deck-zone" data-zone="deck">
             <div class="zone-head">
               <h2>Deck</h2>
               <span data-count="deck">0</span>
             </div>
             <div class="stack-anchor" data-slot="deck"></div>
+            <button id="revealTopBtn" class="pile-action-button" type="button">公開頂</button>
           </div>
 
           <div class="combined-zone">
@@ -116,6 +112,11 @@
               <h2>公開區</h2>
               <span data-count="public">0</span>
             </div>
+            <div class="zone-actions public-actions">
+              <button type="button" data-public-action="top">回牌頂</button>
+              <button type="button" data-public-action="bottom">回牌底</button>
+              <button type="button" data-public-action="sideline">丟場外</button>
+            </div>
             <div class="card-list" data-slot="public"></div>
           </div>
         </aside>
@@ -134,21 +135,17 @@
     </dialog>
 
     <dialog id="importDialog" class="import-dialog">
-      <button id="closeImportDialog" class="icon-button dialog-close" title="關閉">×</button>
-      <h2>匯入 HTML / 牌表</h2>
+      <button id="closeImportDialog" class="icon-button dialog-close" title="關閉" aria-label="關閉">×</button>
+      <h2>匯入文字牌表</h2>
       <label>
-        網站 Base URL
-        <input id="importBaseUrl" type="url" placeholder="https://example.com/deck/page">
-      </label>
-      <label>
-        貼上路基亞 UA 分享連結、牌組頁 HTML，或文字牌表
-        <textarea id="importText" placeholder="可貼 https://rugiacreation.com/ua/deckEdit?Version=...&Deck=...，或 &lt;img src='...'&gt; 的 HTML，或像 4 UA01BT/HTR-1-001 https://...jpg 的牌表"></textarea>
+        文字牌表
+        <textarea id="importText" placeholder="每行格式：4 卡名 https://example.com/card.jpg&#10;也支援貼上路基亞 deckEdit 分享連結"></textarea>
       </label>
       <div class="import-actions">
-        <button id="importFromText" class="primary-button">解析並匯入</button>
+        <button id="importFromText" class="primary-button">匯入牌組</button>
         <button id="clearImportText" class="tool-button">清空</button>
       </div>
-      <p id="importHint">支援路基亞 deckEdit 分享連結；HTML 會抓卡圖；文字牌表會抓每行的數量與圖片網址。</p>
+      <p id="importHint">每行需包含數量與卡圖網址；也支援路基亞 deckEdit 分享連結。匯入時會清空目前牌組。</p>
     </dialog>
 
     <template id="cardTemplate">
@@ -178,6 +175,6 @@
       <button data-menu="select">選取/取消</button>
     </div>
 
-    <script src="app.js?v=20260617-layout9"></script>
+    <script src="app.js?v=20260617-layout21"></script>
   </body>
 </html>

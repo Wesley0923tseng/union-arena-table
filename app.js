@@ -500,6 +500,50 @@ function revealTop() {
   moveCards([id], "public");
 }
 
+function isScrollableCardZone(zone) {
+  return zone === "hand" || zone === "public";
+}
+
+function scrollableCardRow(node) {
+  return node?.closest?.(".hand-row, .list-zone[data-zone=\"public\"] .card-list") || null;
+}
+
+function returnPublicToDeckBottom() {
+  const ids = [...zones.public];
+  if (!ids.length) return;
+  commit(`公開區 ${ids.length} 張回牌底`);
+  zones.public = [];
+  ids.forEach((id) => {
+    const card = state.cards.get(id);
+    if (!card) return;
+    normalizeForZone(card, "deck");
+    zones.deck.unshift(id);
+  });
+  state.selected.clear();
+  render();
+}
+
+function returnPublicToDeckTop() {
+  const ids = [...zones.public];
+  if (!ids.length) return;
+  commit(`公開區 ${ids.length} 張從右到左回牌頂`);
+  zones.public = [];
+  [...ids].reverse().forEach((id) => {
+    const card = state.cards.get(id);
+    if (!card) return;
+    normalizeForZone(card, "deck");
+    zones.deck.push(id);
+  });
+  state.selected.clear();
+  render();
+}
+
+function movePublicToSideline() {
+  const ids = [...zones.public];
+  if (!ids.length) return;
+  moveCards(ids, "sideline");
+}
+
 function peekTop() {
   const id = topCard();
   if (!id) {
@@ -528,6 +572,19 @@ function takeDamage(count) {
     card.resting = false;
     zones.public.push(id);
   });
+  render();
+}
+
+function takeLifeCardDamage(cardId) {
+  if (!zones.life.includes(cardId)) return;
+  const card = state.cards.get(cardId);
+  if (!card) return;
+  commit(`生命區 1 張翻面移到公開區：${cardName(card)}`);
+  zones.life = zones.life.filter((id) => id !== cardId);
+  card.faceDown = false;
+  card.resting = false;
+  zones.public.push(cardId);
+  state.selected.clear();
   render();
 }
 
@@ -784,36 +841,7 @@ function parseQuantity(text) {
   return 1;
 }
 
-function looksLikeCardImage(src, alt = "") {
-  const value = `${src} ${alt}`.toLowerCase();
-  if (!src) return false;
-  if (/\.(png|jpe?g|webp)(\?|#|$)/i.test(src) && /(card|ua|union|arena|bt|st|ex|ue|up|img)/i.test(value)) return true;
-  if (/\.(png|jpe?g|webp)(\?|#|$)/i.test(src) && !/(logo|icon|banner|twitter|facebook|instagram|youtube|language|global|menu|close)/i.test(value)) return true;
-  return false;
-}
-
-function extractCardsFromHtml(text, baseUrl) {
-  const doc = new DOMParser().parseFromString(text, "text/html");
-  const seen = new Set();
-  const cards = [];
-
-  doc.querySelectorAll("img").forEach((img) => {
-    const rawSrc = img.getAttribute("src") || img.getAttribute("data-src") || img.getAttribute("data-original") || "";
-    const alt = img.getAttribute("alt") || img.getAttribute("title") || img.closest("[title]")?.getAttribute("title") || "";
-    if (!looksLikeCardImage(rawSrc, alt)) return;
-    const parentText = img.closest("li, article, tr, .card, [class*=card], [class*=deck]")?.textContent || img.parentElement?.textContent || "";
-    const quantity = parseQuantity(parentText);
-    const image = absoluteUrl(rawSrc, baseUrl);
-    const key = `${image}|${alt}|${cards.length}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    cards.push({ name: alt.trim() || image.split("/").pop(), image, quantity });
-  });
-
-  return cards;
-}
-
-function extractCardsFromText(text, baseUrl) {
+function extractCardsFromText(text) {
   const cards = [];
   const urlPattern = /(https?:\/\/\S+\.(?:png|jpe?g|webp)(?:\?\S*)?|\S+\.(?:png|jpe?g|webp)(?:\?\S*)?)/i;
   text.split(/\r?\n/).forEach((line) => {
@@ -822,7 +850,7 @@ function extractCardsFromText(text, baseUrl) {
     const urlMatch = trimmed.match(urlPattern);
     if (!urlMatch) return;
     const quantity = parseQuantity(trimmed);
-    const image = absoluteUrl(urlMatch[1], baseUrl);
+    const image = absoluteUrl(urlMatch[1], window.location.href);
     const name = trimmed
       .replace(urlMatch[1], "")
       .replace(/^[\s\d x×枚張copycopies.-]+/i, "")
@@ -873,14 +901,30 @@ function extractCardsFromRugiaUrl(text) {
   });
 }
 
+function clearCurrentDeck() {
+  state.cards.forEach((card) => {
+    if (card.image?.startsWith("blob:")) URL.revokeObjectURL(card.image);
+  });
+  Object.keys(zones).forEach((zone) => {
+    zones[zone] = [];
+  });
+  state.cards.clear();
+  state.selected.clear();
+  state.history.length = 0;
+  state.contextCardId = null;
+  state.contextStackEntry = null;
+  state.nextId = 1;
+  closeMenu();
+}
 function importCards(cards, sourceLabel) {
   if (!cards.length) {
-    document.querySelector("#importHint").textContent = "沒有解析到卡圖。可以貼 HTML 原始碼，或每行包含圖片網址的牌表。";
+    document.querySelector("#importHint").textContent = "沒有解析到卡牌。請確認每行包含數量與卡圖網址，或貼上路基亞 deckEdit 分享連結。";
     return;
   }
 
   const total = cards.reduce((sum, card) => sum + Math.max(1, card.quantity || 1), 0);
-  commit(`從 ${sourceLabel} 匯入 ${total} 張到牌庫`);
+  clearCurrentDeck();
+  addLog(`從${sourceLabel} 匯入 ${total} 張到牌庫`);
   cards.forEach((entry) => {
     const quantity = Math.max(1, Math.min(4, Number(entry.quantity) || 1));
     for (let i = 0; i < quantity; i += 1) {
@@ -904,16 +948,13 @@ function importCards(cards, sourceLabel) {
 
 function importFromText() {
   const text = document.querySelector("#importText").value.trim();
-  const baseUrl = document.querySelector("#importBaseUrl").value.trim();
   if (!text) return;
   const rugiaCards = extractCardsFromRugiaUrl(text);
   if (rugiaCards.length) {
     importCards(rugiaCards, "路基亞分享連結");
     return;
   }
-  const htmlCards = /<\s*(html|body|img|div|li|table|article)\b/i.test(text) ? extractCardsFromHtml(text, baseUrl) : [];
-  const textCards = extractCardsFromText(text, baseUrl);
-  importCards(htmlCards.length ? htmlCards : textCards, htmlCards.length ? "HTML" : "文字牌表");
+  importCards(extractCardsFromText(text), "文字牌表");
 }
 
 function createCardElement(card, renderContext = {}) {
@@ -958,12 +999,16 @@ function createCardElement(card, renderContext = {}) {
   function handleDoubleClickAction(event) {
     event.preventDefault();
     closeMenu();
+    if (renderContext.zone === "life") {
+      takeLifeCardDamage(card.id);
+      return;
+    }
     toggleCard(card.id, "resting");
   }
 
   function startHandRightDrag(event) {
-    if (renderContext.zone !== "hand" || event.button !== 2) return false;
-    const handRow = node.closest(".hand-row");
+    if (!isScrollableCardZone(renderContext.zone) || event.button !== 2) return false;
+    const handRow = scrollableCardRow(node);
     if (!handRow) return false;
     event.preventDefault();
     event.stopPropagation();
@@ -1088,6 +1133,13 @@ function createCardElement(card, renderContext = {}) {
       toggleCard(card.id, "resting");
       return;
     }
+    if (renderContext.zone === "deck") {
+      draw(1);
+      return;
+    }
+    if (renderContext.zone === "life") {
+      return;
+    }
     if (event.shiftKey || event.ctrlKey) {
       if (state.selected.has(card.id)) state.selected.delete(card.id);
       else state.selected.add(card.id);
@@ -1108,7 +1160,7 @@ function createCardElement(card, renderContext = {}) {
   node.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     if (renderContext.zone === "ap") return;
-    if (renderContext.zone === "hand") {
+    if (isScrollableCardZone(renderContext.zone)) {
       return;
     }
     state.contextCardId = card.id;
@@ -1163,7 +1215,36 @@ function render() {
   renderTurn();
 }
 
+const menuAllowedByZone = {
+  life: new Set(["view", "flip", "toHand"]),
+  hand: new Set(["view", "flip"]),
+};
+
+function updateMenuVisibility() {
+  const zone = state.contextCardId ? findZone(state.contextCardId) : null;
+  const allowed = menuAllowedByZone[zone] || null;
+  [...menu.querySelectorAll("[data-menu]")].forEach((button) => {
+    button.hidden = Boolean(allowed) && !allowed.has(button.dataset.menu);
+  });
+  [...menu.querySelectorAll("hr")].forEach((rule) => {
+    const before = [];
+    const after = [];
+    let seenRule = false;
+    [...menu.children].forEach((child) => {
+      if (child === rule) {
+        seenRule = true;
+        return;
+      }
+      if (child.tagName !== "BUTTON" || child.hidden) return;
+      if (seenRule) after.push(child);
+      else before.push(child);
+    });
+    rule.hidden = !before.length || !after.length;
+  });
+}
+
 function openMenu(x, y) {
+  updateMenuVisibility();
   const activeDialog = [stackDialog, importDialog].find((item) => item.open);
   if (activeDialog && menu.parentElement !== activeDialog) {
     activeDialog.appendChild(menu);
@@ -1171,8 +1252,14 @@ function openMenu(x, y) {
     document.body.appendChild(menu);
   }
   menu.hidden = false;
-  menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
-  menu.style.top = `${Math.min(y, window.innerHeight - 360)}px`;
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const bounds = menu.getBoundingClientRect();
+  const padding = 8;
+  const left = clamp(x, padding, Math.max(padding, window.innerWidth - bounds.width - padding));
+  const top = clamp(y, padding, Math.max(padding, window.innerHeight - bounds.height - padding));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
 }
 
 function closeMenu() {
@@ -1193,7 +1280,7 @@ function suppressClickBriefly(duration = 180) {
 function clearActiveTouchPointer(pointerId) {
   const cardId = activeTouchCards.get(pointerId);
   activeTouchCards.delete(pointerId);
-  if (![...activeTouchCards.values()].some((id) => findZone(id) === "hand")) {
+  if (![...activeTouchCards.values()].some((id) => isScrollableCardZone(findZone(id)))) {
     handTwoFingerScroll = false;
     handTwoFingerGesture = null;
   }
@@ -1241,7 +1328,7 @@ function touchCenter(touches) {
 
 function startHandTwoFingerGesture(card, touches, sourceNode = null) {
   const center = touchCenter(touches);
-  const handRow = sourceNode?.closest?.(".hand-row") || null;
+  const handRow = scrollableCardRow(sourceNode);
   handTwoFingerScroll = false;
   handTwoFingerGesture = {
     cardId: card.id,
@@ -1267,7 +1354,7 @@ function updateHandTwoFingerGesture(card, touches) {
   const dy = center.clientY - handTwoFingerGesture.startY;
   if (Math.hypot(dx, dy) > 8) {
     handTwoFingerGesture.moved = true;
-    if (handTwoFingerGesture.zone === "hand") {
+    if (isScrollableCardZone(handTwoFingerGesture.zone)) {
       handTwoFingerScroll = true;
       if (handTwoFingerGesture.handRow) {
         handTwoFingerGesture.handRow.scrollLeft = handTwoFingerGesture.startScrollLeft - dx;
@@ -1275,7 +1362,7 @@ function updateHandTwoFingerGesture(card, touches) {
       return true;
     }
   }
-  return handTwoFingerGesture.zone === "hand" && handTwoFingerScroll;
+  return isScrollableCardZone(handTwoFingerGesture.zone) && handTwoFingerScroll;
 }
 
 function finishHandTwoFingerGesture(card, event) {
@@ -1360,7 +1447,7 @@ function enablePointerDrag(node, card, renderContext) {
 
     function onMove(moveEvent) {
       if (moveEvent.pointerId !== drag.pointerId) return;
-      if (renderContext.zone === "hand" && (handTwoFingerScroll || handTwoFingerGesture?.cardId === card.id)) return;
+      if (isScrollableCardZone(renderContext.zone) && (handTwoFingerScroll || handTwoFingerGesture?.cardId === card.id)) return;
       if (twoFingerMenuCardId === card.id) {
         moveEvent.preventDefault();
         return;
@@ -1436,7 +1523,7 @@ window.addEventListener("pointercancel", (event) => {
 }, { capture: true });
 
 document.addEventListener("touchmove", (event) => {
-  if (event.target.closest("dialog, .hand-row, .context-menu, button, input, textarea, select, label")) return;
+  if (event.target.closest("dialog, .hand-row, .list-zone[data-zone=\"public\"] .card-list, .context-menu, button, input, textarea, select, label")) return;
   event.preventDefault();
 }, { passive: false, capture: true });
 
@@ -1446,7 +1533,7 @@ document.addEventListener("dblclick", (event) => {
 }, { capture: true });
 
 document.addEventListener("wheel", (event) => {
-  const handRow = event.target.closest(".hand-row");
+  const handRow = event.target.closest(".hand-row, .list-zone[data-zone=\"public\"] .card-list");
   if (handRow) {
     lastHandWheelAt = Date.now();
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
@@ -1489,6 +1576,12 @@ document.querySelectorAll("[data-zone]").forEach((zoneEl) => {
   if (zone === "sideline" || zone === "removal") {
     zoneEl.addEventListener("click", () => showZoneCards(zone));
   }
+  if (zone === "deck") {
+    zoneEl.addEventListener("click", (event) => {
+      if (event.target.closest(".card, button")) return;
+      draw(1);
+    });
+  }
   zoneEl.addEventListener("dragover", (event) => {
     if (zone === "ap") return;
     event.preventDefault();
@@ -1511,11 +1604,34 @@ document.querySelectorAll("[data-open-zone]").forEach((button) => {
   });
 });
 
+document.querySelectorAll("[data-public-action]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const actions = {
+      top: returnPublicToDeckTop,
+      bottom: returnPublicToDeckBottom,
+      sideline: movePublicToSideline,
+    };
+    actions[button.dataset.publicAction]?.();
+  });
+});
+
 document.querySelector("#openTextImport").addEventListener("click", () => importDialog.showModal());
 document.querySelector("#closeImportDialog").addEventListener("click", () => importDialog.close());
+document.querySelector("#revealTopBtn").addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  revealTop();
+});
+document.querySelector("#endTurnBtn").addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  readyZones(true);
+});
 document.querySelector("#clearImportText").addEventListener("click", () => {
   document.querySelector("#importText").value = "";
-  document.querySelector("#importHint").textContent = "支援路基亞 deckEdit 分享連結；HTML 會抓卡圖；文字牌表會抓每行的數量與圖片網址。";
+  document.querySelector("#importHint").textContent = "每行需包含數量與卡圖網址；也支援路基亞 deckEdit 分享連結。匯入時會清空目前牌組。";
 });
 document.querySelector("#importFromText").addEventListener("click", importFromText);
 
@@ -1527,11 +1643,8 @@ document.querySelector(".top-actions").addEventListener("click", (event) => {
     openingHand,
     mulligan,
     shuffleDeck,
-    drawOne: () => draw(1),
     drawSeven: () => draw(7),
     peekTop,
-    revealTop,
-    damageOne: () => takeDamage(1),
     damageTwo: () => takeDamage(2),
     readyAll: () => readyZones(true),
   };
@@ -1625,18 +1738,6 @@ document.querySelector("#undoBtn").addEventListener("click", () => {
   if (snap) restore(snap);
 });
 
-document.querySelector("#layoutModeBtn").addEventListener("click", () => {
-  document.body.classList.toggle("layout-mode");
-  const enabled = document.body.classList.contains("layout-mode");
-  document.querySelector("#layoutModeBtn").classList.toggle("active", enabled);
-  document.querySelector("#resetLayoutBtn").hidden = !enabled;
-});
-
-document.querySelector("#resetLayoutBtn").addEventListener("click", () => {
-  Object.assign(layoutState, defaultLayoutState);
-  localStorage.removeItem(layoutStorageKey);
-  applyLayout();
-});
 
 document.querySelectorAll("[data-resize]").forEach((handle) => {
   handle.addEventListener("pointerdown", (event) => {

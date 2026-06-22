@@ -202,6 +202,20 @@ h2 {
   padding: 5px 8px;
 }
 
+.zone-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.zone-actions button {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .table-grid {
   position: relative;
   display: grid;
@@ -373,7 +387,7 @@ body.layout-mode .zone {
   grid-template-columns: repeat(4, 108px);
   justify-content: center;
   align-items: center;
-  gap: 30px;
+  gap: 46px;
   height: calc(100% - 23px);
 }
 
@@ -426,11 +440,31 @@ body.layout-mode .zone {
   gap: 6px;
 }
 
+.ap-zone {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.deck-zone {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
 .ap-grid {
   gap: 12px;
   flex-wrap: nowrap;
   align-content: center;
   justify-content: center;
+  align-items: center;
+  min-height: 0;
+}
+
+.ap-end-button,
+.pile-action-button {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
 }
 
 .ap-grid .card {
@@ -453,7 +487,7 @@ body.layout-mode .zone {
 
 .life-grid .card {
   position: absolute;
-  left: calc(var(--life-index, 0) * 18px);
+  left: calc(var(--life-index, 0) * 23px);
   top: calc(50% - var(--card-h) / 2);
   transform: none;
 }
@@ -469,6 +503,21 @@ body.layout-mode .zone {
   gap: 5px;
   overflow: auto;
   height: calc(100% - 28px);
+}
+
+.list-zone[data-zone="public"] .card-list {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  align-content: flex-end;
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-overflow-scrolling: touch;
+  height: calc(100% - 58px);
+  padding-bottom: 6px;
 }
 
 .stack-anchor {
@@ -666,6 +715,10 @@ body.layout-mode .zone {
   padding: 7px 9px;
 }
 
+.context-menu [hidden] {
+  display: none !important;
+}
+
 .context-menu hr {
   border: 0;
   border-top: 1px solid var(--line);
@@ -758,7 +811,13 @@ body.layout-mode .zone {
 
 .import-dialog h2 {
   margin-bottom: 14px;
+  padding-right: 44px;
   font-size: 18px;
+}
+
+.import-dialog .dialog-close {
+  top: 10px;
+  right: 10px;
 }
 
 .import-dialog label {
@@ -769,7 +828,6 @@ body.layout-mode .zone {
   font-size: 13px;
 }
 
-.import-dialog input,
 .import-dialog textarea {
   width: 100%;
   border: 1px solid var(--line);
