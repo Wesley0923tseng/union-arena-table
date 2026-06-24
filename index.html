@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Union Arena Table Simulator</title>
-    <link rel="stylesheet" href="styles.css?v=20260617-layout21">
+    <link rel="stylesheet" href="styles.css?v=20260623-effects6">
   </head>
   <body>
     <div class="stage-viewport">
@@ -158,12 +158,22 @@
       </article>
     </template>
 
+    <div id="effectMenu" class="context-menu effect-menu" hidden>
+      <button type="button" data-effect-action="powerUp">攻擊力 +1000</button>
+      <button type="button" data-effect-action="powerDown">攻擊力 -1000</button>
+      <hr data-effect-power-divider>
+      <button type="button" data-effect-action="heavySleep">重睡</button>
+      <button type="button" data-effect-action="disableEffect">效果無法發揮</button>
+      <hr>
+      <button type="button" data-effect-action="clear">附加效果消除</button>
+    </div>
     <div id="contextMenu" class="context-menu" hidden>
       <button data-menu="view">放大</button>
       <button data-menu="viewStack">查看下方卡牌</button>
       <button data-menu="flip">翻面</button>
       <button data-menu="rest">橫置/直立</button>
       <button data-menu="raid">疊到選取牌</button>
+      <button data-menu="attachedEffects">附加效果</button>
       <hr>
       <button data-menu="toHand">移到手牌</button>
       <button data-menu="toTop">放牌庫頂</button>
@@ -175,6 +185,6 @@
       <button data-menu="select">選取/取消</button>
     </div>
 
-    <script src="app.js?v=20260617-layout21"></script>
+    <script src="app.js?v=20260623-effects6"></script>
   </body>
 </html>

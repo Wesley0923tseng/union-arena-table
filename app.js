@@ -36,6 +36,9 @@ let suppressHandContextMenuUntil = 0;
 let lastHandWheelAt = 0;
 const template = document.querySelector("#cardTemplate");
 const menu = document.querySelector("#contextMenu");
+const effectMenu = document.querySelector("#effectMenu");
+let effectMenuCardId = null;
+let effectMenuCardNode = null;
 const dialog = document.querySelector("#cardDialog");
 const dialogImage = document.querySelector("#dialogImage");
 const importDialog = document.querySelector("#importDialog");
@@ -275,7 +278,12 @@ function normalizeForZone(card, zone) {
   if (zone === "hand") card.faceDown = false;
   if (zone === "sideline" || zone === "removal" || zone === "public") card.faceDown = false;
   if (zone === "front" || zone === "energy" || zone === "ap") card.faceDown = false;
-  if (zone !== "front" && zone !== "energy") card.resting = false;
+  if (zone !== "front" && zone !== "energy") {
+    card.resting = false;
+    card.powerModifier = 0;
+    card.heavySleep = false;
+    card.effectDisabled = false;
+  }
   if (zone === "front" || zone === "energy") card.resting = true;
 }
 
@@ -589,10 +597,25 @@ function takeLifeCardDamage(cardId) {
 }
 
 function readyZones(includeAp) {
-  commit(includeAp ? "全部轉直" : "角色/Site 轉直");
-  [...zones.front, ...zones.energy, ...(includeAp ? zones.ap : [])].forEach((id) => {
-    state.cards.get(id).resting = false;
+  commit(includeAp ? "回合結束" : "角色/Site 轉直");
+  [...zones.front, ...zones.energy].forEach((id) => {
+    const card = state.cards.get(id);
+    if (!card) return;
+    card.powerModifier = 0;
+    card.effectDisabled = false;
+    if (card.heavySleep && card.resting) {
+      card.heavySleep = false;
+      return;
+    }
+    card.heavySleep = false;
+    card.resting = false;
   });
+  if (includeAp) {
+    zones.ap.forEach((id) => {
+      const card = state.cards.get(id);
+      if (card) card.resting = false;
+    });
+  }
   render();
 }
 
@@ -604,11 +627,120 @@ function toggleCard(cardId, prop) {
     render();
     return;
   }
+  if (prop === "resting" && card.resting && card.heavySleep) {
+    commit(`重睡消耗一次轉正：${cardName(card)}`);
+    card.heavySleep = false;
+    render();
+    return;
+  }
   commit(`${prop === "faceDown" ? "翻面" : "橫置/直立"}：${cardName(card)}`);
   card[prop] = !card[prop];
   render();
 }
 
+function updatePowerModifierNode(node, value) {
+  node.querySelector(".power-modifier")?.remove();
+  if (!value) return;
+  const powerBadge = document.createElement("span");
+  powerBadge.className = `power-modifier ${value > 0 ? "positive" : "negative"}`;
+  powerBadge.textContent = `${value > 0 ? "+" : ""}${value}`;
+  node.appendChild(powerBadge);
+}
+
+function adjustPower(cardId, delta, node) {
+  const card = state.cards.get(cardId);
+  if (!card || !["front", "energy"].includes(findZone(cardId))) return;
+  commit(`攻擊力修正：${cardName(card)} ${delta > 0 ? "+" : ""}${delta}`);
+  card.powerModifier = (Number(card.powerModifier) || 0) + delta;
+  updatePowerModifierNode(node, card.powerModifier);
+}
+function updateAttachedEffectsNode(node, card) {
+  node.querySelector(".attached-effects")?.remove();
+  const effects = [];
+  if (card.heavySleep) effects.push({ text: "重睡", className: "heavy-sleep" });
+  if (card.effectDisabled) effects.push({ text: "效果無法發揮", className: "effect-disabled" });
+  if (!effects.length) return;
+
+  const container = document.createElement("div");
+  container.className = "attached-effects";
+  effects.forEach(({ text, className }) => {
+    const label = document.createElement("span");
+    label.className = className;
+    label.textContent = text;
+    container.appendChild(label);
+  });
+  node.appendChild(container);
+}
+
+function clearAttachedEffects(card, node) {
+  card.powerModifier = 0;
+  card.heavySleep = false;
+  card.effectDisabled = false;
+  updatePowerModifierNode(node, 0);
+  updateAttachedEffectsNode(node, card);
+}
+
+function applyAttachedEffect(action) {
+  const card = state.cards.get(effectMenuCardId);
+  const node = effectMenuCardNode;
+  if (!card || !node || !["front", "energy"].includes(findZone(card.id))) {
+    closeEffectMenu();
+    return;
+  }
+
+  if (action === "powerUp" || action === "powerDown") {
+    adjustPower(card.id, action === "powerUp" ? 1000 : -1000, node);
+    return;
+  }
+
+  if (action === "heavySleep") {
+    commit(`附加重睡：${cardName(card)}`);
+    card.heavySleep = true;
+    card.resting = true;
+    node.classList.add("resting");
+  } else if (action === "disableEffect") {
+    commit(`附加效果無法發揮：${cardName(card)}`);
+    card.effectDisabled = true;
+  } else if (action === "clear") {
+    commit(`清除附加效果：${cardName(card)}`);
+    clearAttachedEffects(card, node);
+    closeEffectMenu();
+    return;
+  }
+
+  updateAttachedEffectsNode(node, card);
+  closeEffectMenu();
+}
+
+function positionFloatingMenu(floatingMenu, x, y) {
+  floatingMenu.style.left = "0px";
+  floatingMenu.style.top = "0px";
+  const bounds = floatingMenu.getBoundingClientRect();
+  const padding = 8;
+  const left = clamp(x, padding, Math.max(padding, window.innerWidth - bounds.width - padding));
+  const top = clamp(y, padding, Math.max(padding, window.innerHeight - bounds.height - padding));
+  floatingMenu.style.left = `${left}px`;
+  floatingMenu.style.top = `${top}px`;
+}
+
+function openEffectMenu(card, node, x, y, includePower) {
+  closeMenu();
+  effectMenuCardId = card.id;
+  effectMenuCardNode = node;
+  effectMenu.querySelectorAll('[data-effect-action="powerUp"], [data-effect-action="powerDown"]')
+    .forEach((button) => {
+      button.hidden = !includePower;
+    });
+  effectMenu.querySelector("[data-effect-power-divider]").hidden = !includePower;
+  effectMenu.hidden = false;
+  positionFloatingMenu(effectMenu, x, y);
+}
+
+function closeEffectMenu() {
+  effectMenu.hidden = true;
+  effectMenuCardId = null;
+  effectMenuCardNode = null;
+}
 function stackOntoSelected(cardId) {
   const targets = [...state.selected].filter((id) => id !== cardId);
   const targetId = targets[0];
@@ -983,27 +1115,55 @@ function createCardElement(card, renderContext = {}) {
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "field-toggle";
-    toggle.title = "橫置/直立";
-    toggle.textContent = "↻";
+    toggle.title = card.resting ? "轉為直立" : "順時針橫置";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.textContent = card.resting ? "↶" : "↷";
     toggle.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       toggleCard(card.id, "resting");
     });
     node.appendChild(toggle);
+
+    const powerControls = document.createElement("div");
+    powerControls.className = "power-controls";
+    [
+      { label: "+", delta: 1000, title: "攻擊力 +1000" },
+      { label: "☰", action: "effects", title: "附加效果" },
+      { label: "−", delta: -1000, title: "攻擊力 -1000" },
+    ].forEach(({ label, delta, action, title }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.title = title;
+      button.setAttribute("aria-label", title);
+      if (action === "effects") button.classList.add("effect-menu-trigger");
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (action === "effects") {
+          const rect = button.getBoundingClientRect();
+          openEffectMenu(card, node, event.clientX || rect.left, event.clientY || rect.bottom, false);
+          return;
+        }
+        adjustPower(card.id, delta, node);
+      });
+      powerControls.appendChild(button);
+    });
+    node.appendChild(powerControls);
+
+    updatePowerModifierNode(node, Number(card.powerModifier) || 0);
+    updateAttachedEffectsNode(node, card);
   }
   if (renderContext.zone === "ap") {
     node.draggable = false;
   }
 
   function handleDoubleClickAction(event) {
+    if (renderContext.zone !== "life") return;
     event.preventDefault();
     closeMenu();
-    if (renderContext.zone === "life") {
-      takeLifeCardDamage(card.id);
-      return;
-    }
-    toggleCard(card.id, "resting");
+    takeLifeCardDamage(card.id);
   }
 
   function startHandRightDrag(event) {
@@ -1155,6 +1315,11 @@ function createCardElement(card, renderContext = {}) {
   });
 
   node.addEventListener("dblclick", (event) => {
+    if (event.target.closest("button")) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     handleDoubleClickAction(event);
   });
   node.addEventListener("contextmenu", (event) => {
@@ -1223,8 +1388,11 @@ const menuAllowedByZone = {
 function updateMenuVisibility() {
   const zone = state.contextCardId ? findZone(state.contextCardId) : null;
   const allowed = menuAllowedByZone[zone] || null;
+  const fieldCard = zone === "front" || zone === "energy";
   [...menu.querySelectorAll("[data-menu]")].forEach((button) => {
-    button.hidden = Boolean(allowed) && !allowed.has(button.dataset.menu);
+    const hiddenByZone = Boolean(allowed) && !allowed.has(button.dataset.menu);
+    const hiddenEffectEntry = button.dataset.menu === "attachedEffects" && !fieldCard;
+    button.hidden = hiddenByZone || hiddenEffectEntry;
   });
   [...menu.querySelectorAll("hr")].forEach((rule) => {
     const before = [];
@@ -1244,6 +1412,7 @@ function updateMenuVisibility() {
 }
 
 function openMenu(x, y) {
+  closeEffectMenu();
   updateMenuVisibility();
   const activeDialog = [stackDialog, importDialog].find((item) => item.open);
   if (activeDialog && menu.parentElement !== activeDialog) {
@@ -1651,6 +1820,13 @@ document.querySelector(".top-actions").addEventListener("click", (event) => {
   actions[action]?.();
 });
 
+effectMenu.addEventListener("click", (event) => {
+  const action = event.target.dataset.effectAction;
+  if (!action) return;
+  event.preventDefault();
+  event.stopPropagation();
+  applyAttachedEffect(action);
+});
 menu.addEventListener("click", (event) => {
   const action = event.target.dataset.menu;
   if (!action) return;
@@ -1677,6 +1853,17 @@ menu.addEventListener("click", (event) => {
   }
   const id = state.contextCardId;
   if (!id) return;
+  if (action === "attachedEffects") {
+    const card = state.cards.get(id);
+    const node = [...document.querySelectorAll(".line-zone .card[data-card-id]")]
+      .find((element) => element.dataset.cardId === id);
+    if (card && node) {
+      const bounds = event.target.getBoundingClientRect();
+      openEffectMenu(card, node, event.clientX || bounds.left, event.clientY || bounds.bottom, true);
+    }
+    closeMenu();
+    return;
+  }
   const actions = {
     view: () => showCard(state.cards.get(id)),
     viewStack: () => showStack(id),
@@ -1702,6 +1889,15 @@ menu.addEventListener("click", (event) => {
   closeMenu();
 });
 
+function closeEffectMenuAndBlockOutside(event) {
+  if (effectMenu.hidden || effectMenu.contains(event.target)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeEffectMenu();
+}
+
+document.addEventListener("pointerdown", closeEffectMenuAndBlockOutside, { capture: true });
+document.addEventListener("click", closeEffectMenuAndBlockOutside, { capture: true });
 function closeMenuAndBlockOutside(event) {
   if (menu.hidden || menu.contains(event.target)) return;
   event.preventDefault();

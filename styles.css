@@ -686,9 +686,144 @@ body.layout-mode .zone {
   background: rgba(17, 20, 25, 0.82);
   color: var(--text);
   padding: 0;
-  font-size: 12px;
+  font-size: 18px;
+  line-height: 1;
+  font-family: "Segoe UI Symbol", sans-serif;
 }
 
+.power-controls {
+  position: absolute;
+  left: -31px;
+  top: 50%;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 100ms ease;
+}
+
+.power-controls::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 0;
+  width: 7px;
+  height: 100%;
+}
+
+.power-controls button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(17, 20, 25, 0.94);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.line-zone .card:hover {
+  z-index: 10;
+}
+
+.line-zone .card:hover .power-controls,
+.power-controls:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.power-modifier {
+  position: absolute;
+  left: 50%;
+  top: -25px;
+  z-index: 11;
+  min-width: 42px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid currentColor;
+  background: rgba(17, 20, 25, 0.94);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.power-modifier.positive {
+  color: #54e39a;
+}
+
+.power-modifier.negative {
+  color: #ff6b72;
+}
+
+.effect-menu-trigger {
+  font-size: 15px !important;
+}
+
+.attached-effects {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.attached-effects span {
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  background: rgba(17, 20, 25, 0.94);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.attached-effects .heavy-sleep {
+  color: var(--yellow);
+}
+
+.attached-effects .effect-disabled {
+  color: #ff7f86;
+}
+
+.effect-menu {
+  z-index: 80;
+  min-width: 160px;
+}
+
+
+.card.resting .power-controls {
+  left: 50%;
+  top: auto;
+  bottom: -31px;
+  transform: translateX(-50%) rotate(-90deg);
+}
+
+.card.resting .power-modifier {
+  left: -25px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+.card.resting .attached-effects {
+  left: calc(100% - 14px);
+  right: auto;
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+}
 .small-button {
   padding: 4px 8px;
   font-size: 12px;
